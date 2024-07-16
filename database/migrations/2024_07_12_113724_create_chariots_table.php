@@ -12,11 +12,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('caisses', function (Blueprint $table) {
+        Schema::create('chariots', function (Blueprint $table) {
             $table->id();
             $table->string('nom')->unique();
+            $table->integer('nombre_pain')->default(0);
             $table->foreignIdFor(Boulangerie::class);
-            $table->integer('solde')->default(0);
             $table->timestamps();
         });
     }
@@ -26,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('caisses');
+        Schema::dropIfExists('chariots');
     }
 };

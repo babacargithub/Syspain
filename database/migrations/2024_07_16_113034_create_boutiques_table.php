@@ -12,11 +12,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('caisses', function (Blueprint $table) {
+        Schema::create('boutiques', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->unique();
+            $table->string('nom')->nullable(false);
             $table->foreignIdFor(Boulangerie::class);
-            $table->integer('solde')->default(0);
+            $table->unique(['nom', 'boulangerie_id']);
+            $table->string('solde_pain')->nullable();
+            $table->string('adresse')->nullable();
+
             $table->timestamps();
         });
     }
@@ -26,6 +29,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('caisses');
+        Schema::dropIfExists('boutiques');
     }
 };

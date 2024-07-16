@@ -1,4 +1,6 @@
 <?php
+
+use App\Models\Boulangerie;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -18,6 +20,7 @@ class CreateClientsTable extends Migration
             $table->string('nom');
             $table->string('telephone');
             $table->timestamps();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
         });
     }
 

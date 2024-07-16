@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Boulangerie;
 use App\Models\Intrant;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -15,6 +16,8 @@ return new class extends Migration
         Schema::create('stock_intrants', function (Blueprint $table) {
             $table->id();
             $table->foreignIdFor(Intrant::class);
+            $table->foreignIdFor(Boulangerie::class);
+
             $table->integer('quantite')->default(0);
             $table->timestamps();
         });

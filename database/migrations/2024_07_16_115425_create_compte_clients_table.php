@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Boulangerie;
+use App\Models\Client;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -12,11 +12,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('caisses', function (Blueprint $table) {
+        Schema::create('compte_clients', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->unique();
-            $table->foreignIdFor(Boulangerie::class);
-            $table->integer('solde')->default(0);
+            $table->foreignIdFor(Client::class);
+            $table->integer('solde_pain')->default(0);
+            $table->integer('dette')->default(0);
+            $table->integer('solde_reliquat')->default(0);
             $table->timestamps();
         });
     }
@@ -26,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('caisses');
+        Schema::dropIfExists('compte_clients');
     }
 };

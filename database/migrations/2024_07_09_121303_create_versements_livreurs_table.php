@@ -1,13 +1,13 @@
 <?php
 /** @noinspection PhpUnused */
 
+use App\Models\Boulangerie;
 use App\Models\Livreur;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateCahierLivreursTable extends Migration
-{
+return new class  extends Migration {
     /**
      * Run the migrations.
      *
@@ -15,15 +15,16 @@ class CreateCahierLivreursTable extends Migration
      */
     public function up(): void
     {
-        Schema::create('cahier_livreurs', function (Blueprint $table) {
+        Schema::create('versement_livreurs', function (Blueprint $table) {
             $table->id();
             $table->integer('nombre_pain_matin')->default(0);
             $table->integer('nombre_pain_soir')->default(0);
-            $table->integer('retour')->default(0);
-            $table->integer('verse')->default(0);
-            $table->foreignIdFor(Livreur::class);
-            $table->date('date_op')->nullable(false);
+            $table->integer('nombre_retour')->default(0);
+            $table->integer('montant_verse')->default(0);
+            $table->foreignIdFor(Livreur::class)->nullable()->constrained()->onDelete('set null')->cascadeOnUpdate();
+            $table->date('date_versement')->nullable(false);
             $table->integer('prix_unit')->default(0);
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->timestamps();
         });
     }
@@ -37,4 +38,4 @@ class CreateCahierLivreursTable extends Migration
     {
         Schema::dropIfExists('cahier_livreurs');
     }
-}
+};
