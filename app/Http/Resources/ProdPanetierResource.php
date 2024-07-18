@@ -2,9 +2,7 @@
 
 namespace App\Http\Resources;
 
-use App\Models\Chariot;
 use App\Models\ChariotProdPanetier;
-use App\Models\DistribPanetier;
 use App\Models\ProductionPanetier;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -22,6 +20,7 @@ class ProdPanetierResource extends JsonResource
         return [
             "id" => $this->id,
             "date_production" => $this->date_production,
+            "identifier" => $this->identifier(),
             "nombre_pain" => $this->nombre_pain,
             "nombre_plat" => $this->nombre_plat,
             "nombre_sac" => $this->nombre_sac,

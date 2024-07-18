@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\DistribPanetier;
 use App\Models\Livreur;
+use App\Models\ProductionPanetier;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Termwind\Components\Li;
 
@@ -14,7 +15,10 @@ class DistribPanetierFactory extends Factory
     public function definition(): array
     {
         return [
-            "livreur_id" => Livreur::first()? Livreur::first()->id : Livreur::factory()->create()->id,
+            "livreur_id" => Livreur::factory(),
+            "production_panetier_id" => ProductionPanetier::factory(),
+            "nombre_pain" => $this->faker->numberBetween(100, 1000),
         ];
     }
+
 }

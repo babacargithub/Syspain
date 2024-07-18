@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Boulangerie;
 use App\Models\Client;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Carbon;

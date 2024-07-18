@@ -89,7 +89,52 @@ class DistribPanetierController extends Controller
             "boutique_id" => "nullable|integer|exists:boutiques,id",
             'production_panetier_id' => 'integer|exists:production_panetiers,id',]);
 
+
+
+        // after update, we take the difference and update solde pain if livreur or client, or boutique or abonnement
+        $productionPanetier = ProductionPanetier::find($distribPanetier->production_panetier_id);
+
+        $shouldIncreaseLivreurCompte = $data['nombre_pain'] > $distribPanetier->nombre_pain  ;
+        $nombreToIncrease = $shouldIncreaseLivreurCompte ? $data['nombre_pain'] - $distribPanetier->nombre_pain : 0;
+        $shouldDecreaseLivreurCompte = $data['nombre_pain'] < $distribPanetier->nombre_pain;
+        $nombreToDecrease = $shouldDecreaseLivreurCompte ? $distribPanetier->nombre_pain - $data['nombre_pain'] : 0;
+       $diff = $nombreToIncrease - $nombreToDecrease;
         $distribPanetier->update($data);
+        if ($distribPanetier->isForClient()) {
+            $client = Client::find($distribPanetier->client_id);
+            $compte_client = $client->compteClient;
+            $compte_client->solde_pain += $diff;
+            $compte_client->dette = $compte_client->dette + ($diff *
+                    $productionPanetier->prix_pain_client);
+            $compte_client->save();
+        }
+        if ($distribPanetier->isForLivreur()) {
+
+            $livreur = Livreur::find($distribPanetier->livreur_id);
+            $compte_livreur = $livreur->compteLivreur;
+            if ($shouldIncreaseLivreurCompte) {
+                $compte_livreur->augmenterSoldePain($nombreToIncrease);
+                $compte_livreur->dette = $compte_livreur->dette + ($nombreToIncrease *
+                        $productionPanetier->prix_pain_livreur);
+            } else if ($shouldDecreaseLivreurCompte) {
+                $compte_livreur->diminuerSoldePain($nombreToDecrease);
+                $compte_livreur->dette = $compte_livreur->dette - ($nombreToDecrease *
+                        $productionPanetier->prix_pain_livreur);
+            }
+            $compte_livreur->save();
+        }
+        if ($distribPanetier->isForBoutique()) {
+            $boutique = Boutique::find($distribPanetier->boutique_id);
+            $boutique->solde_pain += $diff;
+            $boutique->save();
+        }
+        if ($distribPanetier->isForAbonnement()) {
+            $abonnement = Abonnement::find($distribPanetier->abonnement_id);
+            $abonnement->solde_pain += $diff;
+            $abonnement->dette = $abonnement->dette + ($diff *
+                    $productionPanetier->prix_pain_client);
+            $abonnement->save();
+        }
         return response()->json($distribPanetier);
     }
 

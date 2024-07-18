@@ -15,6 +15,9 @@ class Livreur extends Model
         'prenom',
         'nom',
         'telephone',
+        'boulangerie_id',
+        'prix_pain',
+        "is_active"
     ];
     public function boulangerie(): BelongsTo
     {
@@ -26,7 +29,7 @@ class Livreur extends Model
     }
     public function versements() : HasMany
     {
-        return $this->hasMany(VersementLivreur::class);
+        return $this->hasMany(Versement::class);
 
     }
     public function identifier() : string

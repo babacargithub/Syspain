@@ -14,8 +14,9 @@ return new class extends Migration
     {
         Schema::create('caisses', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->unique();
+            $table->string('nom');
             $table->foreignIdFor(Boulangerie::class);
+            $table->unique(['nom', 'boulangerie_id']);
             $table->integer('solde')->default(0);
             $table->timestamps();
         });

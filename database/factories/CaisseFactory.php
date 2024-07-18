@@ -20,6 +20,7 @@ class CaisseFactory extends Factory
     {
         return [
             "nom" => "Caisse Principale",
+            "boulangerie_id" => Boulangerie::factory(),
             //
         ];
     }

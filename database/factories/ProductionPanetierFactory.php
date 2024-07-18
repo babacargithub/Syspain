@@ -14,7 +14,7 @@ class ProductionPanetierFactory extends Factory
     {
         return [
             'date_production' => today()->toDateString(),
-            'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            'boulangerie_id' => Boulangerie::factory(),
             'nombre_pain' => $this->faker->numberBetween(1000,10000),
             'nombre_plat' => $this->faker->numberBetween(100,1000),
             'nombre_sac' => $this->faker->numberBetween(1,100),
@@ -22,6 +22,7 @@ class ProductionPanetierFactory extends Factory
             'donation' => $this->faker->numberBetween(10,100),
             'casse' => $this->faker->numberBetween(10,100),
             'mange' => $this->faker->numberBetween(10,100),
+            'periode' => $this->faker->randomElement(['matin', 'soir']),
 
         ];
     }

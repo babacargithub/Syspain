@@ -5,6 +5,8 @@
  */
 namespace App\Models;
 
+use Carbon\Carbon;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +24,7 @@ class ProductionPanetier extends Model
         'donation',
         'casse',
         'mange',
+        'periode',
         'boulangerie_id'
     ];
 
@@ -61,5 +64,20 @@ class ProductionPanetier extends Model
             + $this->casse + $this->donation + $this->mange + $this->ration;
     }
 
+    public function identifier(): string
+    {
+        return 'Cahier Panetier '.strtoupper($this->periode).' du ' . $this->getDateProductionAttribue();
+
+    }
+
+    public function getDateProductionAttribue(): string
+    {
+        try {
+            return Carbon::parse($this->date_production)->format('d-m-Y');
+        } catch (InvalidFormatException $e) {
+            return $this->date_production;
+        }
+
+    }
     protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];
 }

@@ -20,6 +20,7 @@ class CreateLivreursTable extends Migration
             $table->string('prenom');
             $table->string('nom');
             $table->string('telephone');
+            $table->integer('prix_pain')->default(140);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

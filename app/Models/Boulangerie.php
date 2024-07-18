@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Boulangerie extends Model
 {
     use HasFactory;
-    protected $fillable = ["nom","company_id"];
+    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client"];
 
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {
@@ -34,5 +34,14 @@ class Boulangerie extends Model
     public function boutiques(): HasMany
     {
         return $this->hasMany(Boutique::class);
+    }
+    public function livreurs(): HasMany
+    {
+        return $this->hasMany(Livreur::class);
+    }
+
+    public function versements(): HasMany
+    {
+        return $this->hasMany(Versement::class);
     }
 }

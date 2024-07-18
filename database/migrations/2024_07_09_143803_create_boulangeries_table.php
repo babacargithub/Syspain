@@ -15,6 +15,8 @@ return new class extends Migration
         Schema::create('boulangeries', function (Blueprint $table) {
             $table->id();
             $table->string('nom')->nullable(false);
+            $table->integer('prix_pain_livreur')->nullable(false)->default(145);
+            $table->integer('prix_pain_client')->nullable(false)->default(150);
             $table->foreignIdFor(Company::class);
             $table->timestamps();
         });

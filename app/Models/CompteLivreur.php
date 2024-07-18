@@ -18,4 +18,34 @@ class CompteLivreur extends Model
     {
         return $this->belongsTo(Livreur::class);
     }
+    public function augmenterSoldePain(int $nombre_pain): self
+    {
+        $this->solde_pain += $nombre_pain;
+        return $this;
+    }
+    public function diminuerSoldePain(int $nombre_pain): self
+    {
+        $this->solde_pain -= $nombre_pain;
+        return $this;
+    }
+    public function augmenterDette(int $dette): self
+    {
+        $this->dette += $dette;
+        return $this;
+    }
+    public function diminuerDette(int $dette): self
+    {
+        $this->dette -= $dette;
+        return $this;
+    }
+    public function augmenterSoldeReliquat(int $solde_reliquat): self
+    {
+        $this->solde_reliquat += $solde_reliquat;
+        return $this;
+    }
+    public function diminuerSoldeReliquat(int $solde_reliquat): self
+    {
+        $this->solde_reliquat -= $solde_reliquat;
+        return $this;
+    }
 }

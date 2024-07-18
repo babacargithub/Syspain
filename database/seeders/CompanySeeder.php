@@ -9,6 +9,8 @@ use App\Models\Chariot;
 use App\Models\Client;
 use App\Models\Company;
 use App\Models\Livreur;
+use App\Models\TypeDepense;
+use App\Models\Versement;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 /** @noinspection PhpUnused */
@@ -45,11 +47,16 @@ class CompanySeeder extends Seeder
            Chariot::factory()->count(5)->make()
        );
 
+       TypeDepense::factory()->count(3)->create([
+       ]);
+
 
        // Créer livreur et clients
-       Livreur::factory()->count(5)->create([
-           "boulangerie_id" => $boulangerie->id
-       ]);
+       Livreur::factory()->count(5)
+           ->has(Versement::factory()->count(20))
+           ->create([
+               "boulangerie_id" => $boulangerie->id
+           ]);
        foreach (Livreur::all() as $livreur) {
            $livreur->compteLivreur()->create([
                 "solde_pain" => 0,
@@ -66,7 +73,7 @@ class CompanySeeder extends Seeder
                 "solde_pain" => 0,
                 "dette" => 0,
               ]);
-              $abonnement = Abonnement::factory()->make();
+                $abonnement = Abonnement::factory()->make();
                 $abonnement->client()->associate($client);
                 $abonnement->save();
          }

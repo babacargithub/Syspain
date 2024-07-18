@@ -26,6 +26,8 @@ return new class extends Migration
             $table->integer('casse')->default(0);
             $table->integer('mange')->default(0);
             $table->integer('prix_pain_client')->default(120);
+            $table->enum('periode', ['matin', 'soir']);
+            $table->unique(['boulangerie_id,date_production', 'periode']);
             $table->integer('prix_pain_livreur')->default(150);
             $table->timestamps();
         });

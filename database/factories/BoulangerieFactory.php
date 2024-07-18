@@ -21,7 +21,7 @@ class BoulangerieFactory extends Factory
         return [
             "nom" => $this->faker->company(),
             "created_at" => now(),
-            "company_id" => Company::first()?? Company::factory()->create()->id,
+            "company_id" => Company::factory()
             //
         ];
     }

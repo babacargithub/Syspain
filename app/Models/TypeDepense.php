@@ -8,4 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 class TypeDepense extends Model
 {
     use HasFactory;
+    protected $fillable = ['nom'];
+    public $timestamps = false;
 }

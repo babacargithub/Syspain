@@ -21,6 +21,7 @@ class ChariotFactory extends Factory
         return [
             "nom" => "Chariot ".$this->faker->numberBetween(100, 500)." pains ",
             "nombre_pain" => $this->faker->numberBetween(100, 500),
+            "boulangerie_id" => Boulangerie::factory(),
 
             //
         ];

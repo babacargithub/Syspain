@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Resources\DistribPanetierResource;
 use App\Http\Resources\ProdPanetierResource;
 use App\Models\Boulangerie;
-use App\Models\DistribPanetier;
 use App\Models\ProductionPanetier;
+use App\Rules\UniqueProductionPeriode;
 use Illuminate\Http\Request;
 
 class PanetierController extends Controller
@@ -31,7 +31,7 @@ class PanetierController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'date_production' => 'required',
+            'date_production' => ['date_format:Y-m-d','required', new UniqueProductionPeriode($request->get('date_production'), $request->get('periode'))],
             'nombre_pain' => 'required|integer',
             'nombre_plat' => 'required|integer',
             'nombre_sac' => 'required|integer',
@@ -39,6 +39,7 @@ class PanetierController extends Controller
             'donation' => 'required|integer',
             'casse' => 'required|integer',
             'chariots' => 'array',
+            'periode' => 'required|in:matin,soir',
             'mange' => 'required|integer',
         ]);
         $productionPanetier = new ProductionPanetier($data);
