@@ -11,7 +11,7 @@ class DistribPanetier extends Model
     use HasFactory;
 
     protected $fillable = [
-        "nombre_pain", "livreur_id", "client_id", "boutique_id", "abonnement_id", "production_panetier_id",
+        "nombre_pain", "livreur_id", "client_id", "boutique_id", "abonnement_id", "production_panetier_id","bonus"
     ];
     public function livreur(): BelongsTo
     {

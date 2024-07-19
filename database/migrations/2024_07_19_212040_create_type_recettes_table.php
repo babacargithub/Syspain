@@ -12,11 +12,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('intrants', function (Blueprint $table) {
+        Schema::create('type_recettes', function (Blueprint $table) {
             $table->id();
             $table->string('nom')->nullable(false);
-            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
-            $table->unique(['nom',"boulangerie_id"]);
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
+            $table->unique(['nom', 'boulangerie_id']);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }
@@ -26,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('intrants');
+        Schema::dropIfExists('type_recettes');
     }
 };

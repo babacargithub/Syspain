@@ -61,7 +61,6 @@ class DepenseController extends Controller
             $caisse = $depense->caisse;
             $caisse->diminuerSolde($depense->montant);
             $caisse->save();
-            // TODO Save caisse history
         });
 
         return response()->json($depense, 201);

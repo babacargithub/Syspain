@@ -16,9 +16,11 @@ return new class extends Migration
         Schema::create('stock_intrants', function (Blueprint $table) {
             $table->id();
             $table->foreignIdFor(Intrant::class);
+            $table->string('nom')->nullable(false)->unique(); // add this line
             $table->foreignIdFor(Boulangerie::class);
-
+            $table->integer('code_bar')->nullable();
             $table->integer('quantite')->default(0);
+            $table->integer('prix_achat')->default(0);
             $table->timestamps();
         });
     }

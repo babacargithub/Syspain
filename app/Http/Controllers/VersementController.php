@@ -84,7 +84,6 @@ class VersementController extends Controller
 
         $caisse = Caisse::find($data['caisse_id']);
         $caisse->augmenterSolde($montant_verse);
-        $caisse->save();
         });
 
 
@@ -149,8 +148,18 @@ class VersementController extends Controller
 
             // TODO recalculer reliquat
             $compte_livreur->save();
+            /** @var  $caisse Caisse */
             $caisse = Caisse::find($versement->caisse_id);
+            $solde_avant = $caisse->solde;
             $caisse->diminuerSolde($montant_verse);
+            $caisse->transactions()->create([
+                'montant' => $montant_verse,
+                'type' => 'cashout',
+                "solde_apres" => $caisse->solde + $montant_verse,
+                "solde_avant" => $solde_avant,
+
+                'commentaire' => 'Suppression du versement'
+            ]);
             $caisse->save();
             $versement->delete();
 

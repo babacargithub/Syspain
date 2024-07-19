@@ -21,6 +21,7 @@ class CreateDistribPanetierTable extends Migration
         Schema::create('distrib_panetiers', function (Blueprint $table) {
             $table->id();
             $table->integer('nombre_pain');
+            $table->integer('bonus')->nullable();
             $table->foreignIdFor(Livreur::class)->nullable()->constrained()->onDelete('set null');
             $table->foreignIdFor(Client::class)->nullable()->constrained()->onDelete('set null');
             $table->foreignIdFor(Boutique::class)->nullable()->constrained()->onDelete('set null');

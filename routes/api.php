@@ -5,6 +5,9 @@ use App\Http\Controllers\DistribPanetierController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\PanetierController;
 use App\Http\Controllers\PetrisseurController;
+use App\Http\Controllers\IntrantController;
+use App\Http\Controllers\RecetteController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
 use Illuminate\Support\Facades\Route;
 Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
@@ -30,4 +33,10 @@ Route::resource('livreurs', LivreurController::class);
 Route::resource('versements', VersementController::class);
 Route::get('depenses/date/{date}', [DepenseController::class, 'depensesDate'])->name('depenses.date');
 Route::resource('depenses', DepenseController::class);
+Route::resource('intrants', IntrantController::class);
+Route::post('stocks/entree',[StockController::class,'entreeStock']);
+Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
+Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
+Route::resource('recettes', RecetteController::class);
+
 
