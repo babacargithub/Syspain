@@ -14,7 +14,7 @@ class IntrantFactory extends Factory
     public function definition(): array
     {
         return [
-            'nom' => $this->faker->word(),
+            'nom' => $this->faker->unique()->word(),
         ];
     }
     public function configure(): IntrantFactory

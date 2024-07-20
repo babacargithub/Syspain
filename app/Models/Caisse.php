@@ -80,5 +80,13 @@ class Caisse extends Model
         $this->transactions()->save($transaction);
         return $this;
     }
+    public function recettes() : HasMany
+    {
+        return $this->hasMany(Recette::class);
+    }
+    public function depenses() : HasMany
+    {
+        return $this->hasMany(Depense::class);
+    }
 
 }

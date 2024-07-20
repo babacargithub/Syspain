@@ -18,15 +18,18 @@ class ProductionPetrisseurFactory extends Factory
      */
     public function definition(): array
     {
-        return [
+        $definition = [
             "date_production" => today()->toDateString(),
             "nombre_chariot" => $this->faker->numberBetween(1, 100),
             "nombre_pain" => $this->faker->numberBetween(3000, 9000),
             "nombre_plat" => $this->faker->numberBetween(1, 100),
             "nombre_sac" => $this->faker->numberBetween(1, 30),
-            'boulangerie_id' => Boulangerie::factory()->create()->id,
 
             //
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

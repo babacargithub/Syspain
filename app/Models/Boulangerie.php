@@ -30,6 +30,10 @@ class Boulangerie extends Model
     {
         return $this->hasMany(Chariot::class);
     }
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
+    }
 
     public function boutiques(): HasMany
     {
@@ -44,4 +48,22 @@ class Boulangerie extends Model
     {
         return $this->hasMany(Versement::class);
     }
+    public function typeDepenses(): HasMany
+    {
+        return $this->hasMany(TypeDepense::class);
+    }
+    public function typeRecettes(): HasMany
+    {
+        return $this->hasMany(TypeRecette::class);
+    }
+    public function recettes(): HasMany
+    {
+        return $this->hasMany(Recette::class);
+    }
+    public function abonnements(): HasMany
+    {
+        return $this->hasMany(Abonnement::class);
+    }
+
+
 }

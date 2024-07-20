@@ -14,11 +14,14 @@ class DepenseFactory extends Factory
 
     public function definition(): array
     {
-        return [
+        $definition= [
             'type_depense_id' => TypeDepense::factory(),
-            'caisse_id' => Caisse::requireCaisseOfLoggedInUser(),
             'montant' => $this->faker->randomNumber(),
             'commentaire' => $this->faker->word(),
         ];
+        if (app()->environment('testing')) {
+            $definition["caisse_id"] =  Caisse::requireCaisseOfLoggedInUser();
+        }
+        return $definition;
     }
 }

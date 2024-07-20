@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Abonnement;
+use App\Models\Boulangerie;
 use App\Models\Boutique;
+use App\Models\Chariot;
 use App\Models\Client;
 use App\Models\DistribPanetier;
 use App\Models\Livreur;
@@ -15,11 +17,20 @@ use Illuminate\Support\Facades\DB;
 class DistribPanetierControllerTest extends TestCase
 {
     use RefreshDatabase;
+    private ?Boulangerie $boulangerie;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->boulangerie = Boulangerie::factory()->create();
+    }
 
 
     public function test_store_creates_new_distribPanetier()
     {
         // create a productionPanetier
+        $chariot1 = Chariot::factory()->for($this->boulangerie)->create();
+        $chariot2 = Chariot::factory()->for($this->boulangerie)->create();
         $response = $this->postJson("api/panetiers",[
             "date_production" => "2024-07-17",
             "nombre_pain" => 10000,
@@ -31,6 +42,8 @@ class DistribPanetierControllerTest extends TestCase
             "mange" => 12,
             "periode" => "matin",
             "chariots" => [
+                ['chariot_id'=>$chariot1->id,"nombre"=>20],
+                ['chariot_id'=>$chariot2->id,"nombre"=>30]
             ]
         ]);
 
@@ -53,6 +66,8 @@ class DistribPanetierControllerTest extends TestCase
             "mange" => 12,
             "periode" => "matin",
             "chariots" => [
+                ['chariot_id'=>$chariot1->id,"nombre"=>20],
+                ['chariot_id'=>$chariot2->id,"nombre"=>30]
             ]
         ]);
         $secondResponse->assertStatus(422);

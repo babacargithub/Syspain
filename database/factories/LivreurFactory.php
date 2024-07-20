@@ -13,12 +13,15 @@ class LivreurFactory extends Factory
 
     public function definition(): array
     {
-        return [
+        $definition = [
             'prenom' => $this->faker->firstName(),
             'nom' => $this->faker->lastName(),
             'telephone' => $this->faker->phoneNumber(),
-            "boulangerie_id" => Boulangerie::factory()
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
     // add compte livreur
     public function configure(): LivreurFactory

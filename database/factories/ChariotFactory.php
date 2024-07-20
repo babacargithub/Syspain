@@ -18,12 +18,15 @@ class ChariotFactory extends Factory
      */
     public function definition(): array
     {
-        return [
+        $definition = [
             "nom" => "Chariot ".$this->faker->numberBetween(100, 500)." pains ",
             "nombre_pain" => $this->faker->numberBetween(100, 500),
-            "boulangerie_id" => Boulangerie::factory(),
 
             //
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

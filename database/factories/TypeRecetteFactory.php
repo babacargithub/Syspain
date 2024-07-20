@@ -17,10 +17,14 @@ class TypeRecetteFactory extends Factory
      */
     public function definition(): array
     {
-        return [
+        $definition = [
             'nom' => $this->faker->word,
-            'boulangerie_id' => Boulangerie::factory(),
+
 
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

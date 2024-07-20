@@ -22,6 +22,10 @@ class CaisseTransaction extends Model
     {
         return $this->belongsTo(Caisse::class);
     }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
     protected $casts = [
         'metadata' => 'array'
     ];

@@ -14,11 +14,14 @@ class DistribPanetierFactory extends Factory
 
     public function definition(): array
     {
-        return [
+        $definition = [
             "livreur_id" => Livreur::factory(),
-            "production_panetier_id" => ProductionPanetier::factory(),
-            "nombre_pain" => $this->faker->numberBetween(100, 1000),
+            "nombre_pain" => $this->faker->numberBetween(100, 1000)
         ];
+         if (app()->environment('testing')) {
+             $definition["production_panetier_id"] =  ProductionPanetier::factory();
+         }
+         return $definition;
     }
 
 }

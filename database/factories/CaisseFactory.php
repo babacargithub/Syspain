@@ -18,10 +18,15 @@ class CaisseFactory extends Factory
      */
     public function definition(): array
     {
-        return [
+        $definition = [
             "nom" => "Caisse Principale",
-            "boulangerie_id" => Boulangerie::factory(),
+
             //
         ];
+        // if env is testing, we can add the following fields
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

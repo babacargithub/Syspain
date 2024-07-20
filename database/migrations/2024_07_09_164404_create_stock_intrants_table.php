@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('stock_intrants', function (Blueprint $table) {
             $table->id();
-            $table->foreignIdFor(Intrant::class);
+            $table->foreignIdFor(Intrant::class)->constrained()->cascadeOnDelete();
             $table->string('nom')->nullable(false)->unique(); // add this line
             $table->foreignIdFor(Boulangerie::class);
             $table->integer('code_bar')->nullable();

@@ -25,5 +25,13 @@ class Recette extends Model
     {
         return $this->identifier();
     }
+    public function caisse(): BelongsTo
+    {
+        return $this->belongsTo(Caisse::class);
+    }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
     protected $appends = ["identifier"];
 }

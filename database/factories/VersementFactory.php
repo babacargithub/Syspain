@@ -15,14 +15,17 @@ class VersementFactory extends Factory
 
     public function definition(): array
     {
-        return [
+        $definition = [
             'nombre_pain_matin' => $this->faker->randomNumber(),
             'nombre_pain_soir' => $this->faker->randomNumber(),
             'nombre_retour' => $this->faker->randomNumber(),
             'montant_verse' => $this->faker->numberBetween(10000, 900000),
             'date_versement' => Carbon::now(),
-            'boulangerie_id' => Boulangerie::factory(),
             'caisse_id' => Caisse::factory(),
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

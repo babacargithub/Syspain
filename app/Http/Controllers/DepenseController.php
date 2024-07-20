@@ -57,6 +57,7 @@ class DepenseController extends Controller
         $depense = new Depense($validatedData);
         DB::transaction(function () use ($depense) {
             $depense->caisse()->associate(Caisse::requireCaisseOfLoggedInUser());
+            $depense->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
             $depense->save();
             $caisse = $depense->caisse;
             $caisse->diminuerSolde($depense->montant);

@@ -12,9 +12,8 @@ class ProductionPanetierFactory extends Factory
 
     public function definition(): array
     {
-        return [
+        $definition= [
             'date_production' => today()->toDateString(),
-            'boulangerie_id' => Boulangerie::factory(),
             'nombre_pain' => $this->faker->numberBetween(1000,10000),
             'nombre_plat' => $this->faker->numberBetween(100,1000),
             'nombre_sac' => $this->faker->numberBetween(1,100),
@@ -25,5 +24,9 @@ class ProductionPanetierFactory extends Factory
             'periode' => $this->faker->randomElement(['matin', 'soir']),
 
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

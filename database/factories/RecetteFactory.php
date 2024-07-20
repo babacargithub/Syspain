@@ -2,11 +2,14 @@
 
 namespace Database\Factories;
 
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\Recette;
 use App\Models\TypeRecette;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Recette>
+ * @extends Factory<Recette>
  */
 class RecetteFactory extends Factory
 {
@@ -18,7 +21,9 @@ class RecetteFactory extends Factory
     public function definition(): array
     {
         return [
-            "montant" => $this->faker->randomNumber(7)
+            "montant" => $this->faker->randomNumber(7),
+            "type_recette_id" => TypeRecette::factory(),
+            "boulangerie_id" => Boulangerie::factory(),
         ];
     }
 }

@@ -13,6 +13,7 @@ class Client extends Model
     protected $fillable = [
         'prenom',
         'nom',
+        "boulangerie_id",
         'telephone',
     ];
     public function boulangerie(): BelongsTo

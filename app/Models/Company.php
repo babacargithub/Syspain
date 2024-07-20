@@ -9,6 +9,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Company extends Model
 {
     use HasFactory;
+
+    public static function requireCompanyOfLoggedInUser()
+    {
+        //TODO: Implement this method
+        return Company::first()??Company::factory()->create();
+    }
+
     public function boulangeries(): HasMany
     {
         return $this->hasMany(Boulangerie::class);

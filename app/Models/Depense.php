@@ -26,4 +26,8 @@ class Depense extends Model
     {
         return $this->belongsTo(Caisse::class);
     }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
 }

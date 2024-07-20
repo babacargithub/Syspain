@@ -38,7 +38,7 @@ class PanetierController extends Controller
             'ration' => 'required|integer',
             'donation' => 'required|integer',
             'casse' => 'required|integer',
-            'chariots' => 'array',
+            'chariots' => '|required|array',
             'periode' => 'required|in:matin,soir',
             'mange' => 'required|integer',
         ]);
@@ -57,6 +57,7 @@ class PanetierController extends Controller
             'nombre_pain' => 'integer',
             'nombre_plat' => 'integer',
             'nombre_sac' => 'integer',
+            "nombre_chariot" => "integer",
             'ration' => 'integer',
             'donation' => 'integer',
             'casse' => 'integer',

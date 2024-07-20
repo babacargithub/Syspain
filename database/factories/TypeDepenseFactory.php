@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Boulangerie;
 use App\Models\TypeDepense;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -11,8 +12,12 @@ class TypeDepenseFactory extends Factory
 
     public function definition(): array
     {
-        return [
+        $definition = [
             'nom' => $this->faker->name(),
         ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory();
+        }
+        return $definition;
     }
 }

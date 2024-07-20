@@ -12,6 +12,7 @@ use App\Http\Controllers\VersementController;
 use Illuminate\Support\Facades\Route;
 Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
 Route::resource('petrisseurs', PetrisseurController::class);
+Route::get('panetiers/date/{date}', [PanetierController::class, 'productionDuJour']);
 Route::resource('panetiers', PanetierController::class)
 
     ->parameters([

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
 use App\Models\Company;
+use App\Models\Intrant;
 use App\Models\ProductionPetrisseur;
 use Illuminate\Http\Request;
 
@@ -25,18 +26,22 @@ class PetrisseurController extends Controller
         $data = $request->validate([
             'date_production' => 'required|date',
             'nombre_chariot' => 'required|integer',
+            'nombre_sac'  => 'required|integer', // 'nombre_sac' => 'required|integer
             'nombre_plat'  => 'required|integer',
             'nombre_pain'  => 'required|integer',
         ]);
-        $production = new ProductionPetrisseur();
-        $production->date_production = $data['date_production'];
-        $production->nombre_chariot = $data['nombre_chariot'];
-        $production->nombre_plat = $data['nombre_plat'];
-        $production->nombre_pain = $data['nombre_pain'];
+        $production = new ProductionPetrisseur($data);
+
         $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
 
         $production->boulangerie()->associate($boulangerie);
         $production->save();
+        // réduire stock de farine
+        $intrantFarine = Intrant::where('nom', 'LIKE','%farine%')
+            ->whereBoulangerieId($boulangerie->id)
+            ->first();
+        $stockFarine =$intrantFarine->stock;
+        $stockFarine->diminuerStock($production->nombre_sac);
         return response()->json($production, 201);
 
     }
@@ -50,6 +55,7 @@ class PetrisseurController extends Controller
         $data = $request->validate([
             'date_production' => 'date',
             'nombre_chariot' => 'integer',
+            'nombre_sac'  => 'integer',
             'nombre_plat'  => 'integer',
             'nombre_pain'  => 'integer',
         ]);

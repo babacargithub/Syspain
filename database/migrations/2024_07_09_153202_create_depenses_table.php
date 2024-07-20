@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Boulangerie;
 use App\Models\Caisse;
 use App\Models\TypeDepense;
 use Illuminate\Database\Migrations\Migration;
@@ -16,6 +17,7 @@ return new class extends Migration
         Schema::create('depenses', function (Blueprint $table) {
             $table->id();
             $table->foreignIdFor(TypeDepense::class)->nullable()->constrained()->nullOnDelete();
+            $table->foreignIdFor(Boulangerie::class)->nullable(false)->constrained()->cascadeOnDelete();
             $table->foreignIdFor(Caisse::class)->nullable(false)->constrained()->cascadeOnDelete();
             $table->integer('montant')->nullable(false);
             $table->string('commentaire')->nullable();
