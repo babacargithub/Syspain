@@ -1,6 +1,7 @@
 <?php
 namespace Database\Seeders;
 
+use App\Models\Abonnement;
 use App\Models\Boulangerie;
 use App\Models\Boutique;
 use App\Models\Caisse;
@@ -8,6 +9,7 @@ use App\Models\CaisseTransaction;
 use App\Models\Chariot;
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\CompteClient;
 use App\Models\CompteLivreur;
 use App\Models\Depense;
 use App\Models\Intrant;
@@ -54,9 +56,9 @@ class DevDatabaseSeeder extends Seeder
         foreach ($clients as $client) {
             $client->boulangerie_id = $boulangerie->id;
             $client->save();
-//            $client->abonnement()->save(Abonnement::factory()->make());
-//                $client->compteClient()->save(CompteClient::factory()->make());
-//                $client->save();
+            $client->abonnement()->save(Abonnement::factory()->make());
+                $client->compteClient()->save(CompteClient::factory()->make());
+                $client->save();
         }
 
 

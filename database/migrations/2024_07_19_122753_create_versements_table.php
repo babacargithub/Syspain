@@ -35,7 +35,7 @@ return new class  extends Migration {
             $table->integer('prix_unit')->default(0);
             $table->json('compte_data')->nullable();
             $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
-            $table->foreignIdFor(model: Caisse::class)->constrained()->onDelete('set null')->cascadeOnUpdate();
+            $table->foreignIdFor(Caisse::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->timestamps();
         });
     }

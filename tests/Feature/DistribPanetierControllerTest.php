@@ -176,4 +176,57 @@ class DistribPanetierControllerTest extends TestCase
         $response->assertStatus(200);
         $response->assertJson($distribPanetier->toArray());
     }
+    public function test_get_entities_for_distrib_returns_correct_data()
+    {
+        // Create test data
+        $clients = Client::factory()->count(2)->create(['boulangerie_id' => $this->boulangerie->id]);
+        $livreurs = Livreur::factory()->count(2)->create(['boulangerie_id' => $this->boulangerie->id, 'is_active' => true]);
+        $abonnements = Abonnement::factory()->count(2)->create(['client_id' => $clients->first()->id]);
+        $boutiques = Boutique::factory()->count(2)->create(['boulangerie_id' => $this->boulangerie->id]);
+
+        // Call the endpoint
+        $response = $this->getJson('/api/distribution_panetiers/destinations');
+
+        // Assertions
+        $response->assertStatus(200);
+
+        $responseData = $response->json();
+
+        // Assert clients
+        $this->assertCount(2, $responseData['clients']);
+        $this->assertEquals($clients->pluck('id')->toArray(), array_column($responseData['clients'], 'id'));
+        $this->assertEquals($clients->pluck('nom')->toArray(), array_column($responseData['clients'], 'nom'));
+
+        // Assert livreurs
+        $this->assertCount(2, $responseData['livreurs']);
+        $this->assertEquals($livreurs->pluck('id')->toArray(), array_column($responseData['livreurs'], 'id'));
+        $this->assertEquals($livreurs->pluck('nom')->toArray(), array_column($responseData['livreurs'], 'nom'));
+
+        // Assert abonnements
+        $this->assertCount(2, $responseData['abonnements']);
+        $this->assertEquals($abonnements->pluck('id')->toArray(), array_column($responseData['abonnements'], 'id'));
+        $this->assertEquals($abonnements->map->identifier()->toArray(), array_column($responseData['abonnements'], 'nom'));
+
+        // Assert boutiques
+        $this->assertCount(2, $responseData['boutiques']);
+        $this->assertEquals($boutiques->pluck('id')->toArray(), array_column($responseData['boutiques'], 'id'));
+        $this->assertEquals($boutiques->pluck('nom')->toArray(), array_column($responseData['boutiques'], 'nom'));
+    }
+
+    public function test_get_entities_for_distrib_with_no_entities()
+    {
+        // Call the endpoint with no entities
+        $response = $this->getJson('/api/distribution_panetiers/destinations');
+
+        // Assertions
+        $response->assertStatus(200);
+
+        $responseData = $response->json();
+
+        // Assert empty results
+        $this->assertEmpty($responseData['clients']);
+        $this->assertEmpty($responseData['livreurs']);
+        $this->assertEmpty($responseData['abonnements']);
+        $this->assertEmpty($responseData['boutiques']);
+    }
 }

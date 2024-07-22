@@ -17,6 +17,7 @@ class PanetierController extends Controller
         $productions = ProductionPanetier::with('distribPanetiers')->whereBetween('date_production', [now()
                 ->startOfMonth()->toDateString(), now()
             ->endOfMonth()->toDateString()])
+            ->orderByDesc('date_production')
             ->get();
         return response()->json($productions);
     }
@@ -77,6 +78,7 @@ class PanetierController extends Controller
     public function show(ProductionPanetier $productionPanetier)
     {
         $productionPanetier->load('chariots');
+
         $livreurs = $productionPanetier->distribPanetiers()->whereNotNull('livreur_id')->get();
         $clients = $productionPanetier->distribPanetiers()->whereNotNull('client_id')->get();
         $abonnements = $productionPanetier->distribPanetiers()->whereNotNull('abonnement_id')->get();

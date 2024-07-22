@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Abonnement;
+use App\Models\Boulangerie;
 use App\Models\Boutique;
 use App\Models\Client;
 use App\Models\DistribPanetier;
@@ -23,6 +24,7 @@ class DistribPanetierController extends Controller
             "boutique_id" => "nullable|integer|exists:boutiques,id",
             "paye"=> "boolean",
             'production_panetier_id' => 'integer|exists:production_panetiers,id',]);
+        $productionPanetier->nombre_pain = $productionPanetier->nombre_pain_entregistre;
         if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain produit"], 422);
         }
@@ -148,6 +150,44 @@ class DistribPanetierController extends Controller
     public function show(DistribPanetier $distribPanetier)
     {
         return response()->json($distribPanetier);
+    }
+
+    public function getEntitiesForDistrib(Request $request)
+    {
+        $boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+
+        $clients = Client::whereBoulangerieId($boulangerie_id)->get()->map(function (Client $client){
+            return [
+                'id' => $client->id,
+                'nom' => $client->identifier()
+            ];
+        });
+        $livreurs = Livreur::whereBoulangerieId($boulangerie_id)->whereIsActive(true)
+            ->get()->map(function (Livreur $livreur){
+                return [
+                    'id' => $livreur->id,
+                    'nom' => $livreur->identifier(),
+                ];
+            })
+        ;
+        $abonnements = Abonnement::whereHas("client",function ($query) use ($boulangerie_id){
+            $query->where("boulangerie_id",$boulangerie_id);
+
+        })->get()->map(function (Abonnement $abonnement){
+            return [
+                'id' => $abonnement->id,
+                'nom' => $abonnement->identifier(),
+            ];
+        });
+        $boutiques = Boutique::whereBoulangerieId($boulangerie_id)->orderBy('id')
+            ->get(['id', 'nom']);
+
+        return response()->json([
+            'clients' => $clients,
+            'livreurs' => $livreurs,
+            'abonnements' => $abonnements,
+            'boutiques' => $boutiques,
+        ]);
     }
 
 

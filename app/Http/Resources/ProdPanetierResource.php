@@ -30,11 +30,15 @@ class ProdPanetierResource extends JsonResource
             "total_pain_petrisseur_produit" => $this->total_pain_petrisseur_produit,
             "nombre_pain_entregistre" => $this->nombre_pain_entregistre,
             "total_pain_distribue" => $this->total_pain_distribue,
+            //TODO change later
+
+            "resultat"=>2340403,
 
             "chariots" => $this->chariots->map(function (ChariotProdPanetier $chariotProdPanetier) {
                 return [
-                    "nom" => $chariotProdPanetier->chariot->nom,
+                    "nom" => $chariotProdPanetier->chariot->identifier(),
                     "nombre" => $chariotProdPanetier->nombre,
+                    "nombre_pain"=> $chariotProdPanetier->chariot->nombre_pain
                 ];
             }),
             "mange" => $this->mange,

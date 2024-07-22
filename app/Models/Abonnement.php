@@ -20,6 +20,7 @@ class Abonnement extends Model
     {
         return $this->belongsTo(Client::class);
     }
+
     public function identifier() :string
     {
         return 'Abonnement de '. $this->client->identifier();

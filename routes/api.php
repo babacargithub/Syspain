@@ -9,6 +9,7 @@ use App\Http\Controllers\IntrantController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
+use App\Models\Chariot;
 use Illuminate\Support\Facades\Route;
 Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
 Route::resource('petrisseurs', PetrisseurController::class);
@@ -18,7 +19,8 @@ Route::resource('panetiers', PanetierController::class)
     ->parameters([
         'panetiers' => 'productionPanetier',
         // customise the store route
-    ]);;
+    ]);
+Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
 Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
 Route::resource('distribution_panetiers', DistribPanetierController::class,[
     'only' => ['index','update','destroy','show']
@@ -39,5 +41,16 @@ Route::post('stocks/entree',[StockController::class,'entreeStock']);
 Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
 Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
 Route::resource('recettes', RecetteController::class);
+Route::get('chariots',function (){
+    return response()->json(Chariot::all()->map(function (Chariot $chariot){
+        return [
+            'id' => $chariot->id,
+            'nom' => $chariot->nom,
+            "nombre" => $chariot->nombre_pain,
+        ];
+    }));
+
+});
+
 
 

@@ -62,8 +62,11 @@ class ProductionPanetier extends Model
     public function getNombrePainEntregistreAttribute()
     {
         $nombre_pain_plat = 10; // TODO dynamise this
-        return $this->chariots()->sum('nombre_pain')+ ($this->nombre_plat * $nombre_pain_plat);
-
+        return $this->chariots()
+                ->selectRaw('SUM(chariot_prod_panetiers.nombre * chariots.nombre_pain) as total_nombre_pain')
+                ->join('chariots', 'chariots.id', '=', 'chariot_prod_panetiers.chariot_id')
+                ->where('chariot_prod_panetiers.production_panetier_id', $this->id)
+                ->value('total_nombre_pain') + ($this->nombre_plat * $nombre_pain_plat);
     }
     public  function getTotalPainDistribueAttribute()
     {

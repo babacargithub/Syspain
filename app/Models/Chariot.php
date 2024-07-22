@@ -15,4 +15,8 @@ class Chariot extends Model
     {
         return $this->belongsTo(Boulangerie::class);
     }
+    public function identifier(): string
+    {
+        return "Chariot ".$this->nombre_pain." pains";
+    }
 }
