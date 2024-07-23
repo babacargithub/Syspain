@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 class StockIntrant extends Model
 {
     use HasFactory;
+    use BoulangerieScope;
+
     protected $fillable = ["nom","intrant_id", "boulangerie_id", "quantite", "prix_achat", "code_bar"];
 
     public function intrant(): BelongsTo

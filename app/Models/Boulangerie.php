@@ -14,6 +14,9 @@ class Boulangerie extends Model
 
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {
+        if (app()->runningUnitTests()) {
+            return Boulangerie::factory()::mockActiveBoulangerie();
+        }
         // TODO change this to the actual user
         return  Boulangerie::first() ?? Boulangerie::factory()->create();
     }

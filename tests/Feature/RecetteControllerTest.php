@@ -14,21 +14,10 @@ class RecetteControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected ?User $user;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // Assuming you have a User factory
-        $this->user = User::factory()->create();
-        $this->actingAs($this->user);
-    }
-
     public function test_index_returns_recettes()
     {
         $typeRecette = TypeRecette::factory()->make();
-        $typeRecette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        $typeRecette->boulangerie_id = $this->boulangerie->id;
         $typeRecette->save();
         $caisse = Caisse::requireCaisseOfLoggedInUser();
 

@@ -5,6 +5,7 @@
  */
 namespace App\Models;
 
+use App\Traits\BoulangerieScope;
 use Carbon\Carbon;
 use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ProductionPanetier extends Model
 {
     use HasFactory;
+    use BoulangerieScope;
+
     protected $fillable = [
         'date_production',
         'nombre_pain',
@@ -87,6 +90,11 @@ class ProductionPanetier extends Model
         } catch (InvalidFormatException $e) {
             return $this->date_production;
         }
+
+    }
+    public function getCorrespondingProdPetrisseur() : ?ProductionPetrisseur
+    {
+        return ProductionPetrisseur::ofCurrentBoulangerie()->whereDateProduction($this->date_production)->first();
 
     }
     protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];

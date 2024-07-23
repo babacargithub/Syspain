@@ -17,14 +17,6 @@ use Illuminate\Support\Facades\DB;
 class DistribPanetierControllerTest extends TestCase
 {
     use RefreshDatabase;
-    private ?Boulangerie $boulangerie;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->boulangerie = Boulangerie::factory()->create();
-    }
-
 
     public function test_store_creates_new_distribPanetier()
     {
@@ -118,7 +110,7 @@ class DistribPanetierControllerTest extends TestCase
     {
         $productionPanetier = ProductionPanetier::factory()->create(['nombre_pain' => 1000]);
         $data = [
-            'nombre_pain' => 1100,
+            'nombre_pain' => 1100030000,
             'livreur_id' => null,
             'client_id' => null,
             'abonnement_id' => null,
@@ -195,12 +187,12 @@ class DistribPanetierControllerTest extends TestCase
         // Assert clients
         $this->assertCount(2, $responseData['clients']);
         $this->assertEquals($clients->pluck('id')->toArray(), array_column($responseData['clients'], 'id'));
-        $this->assertEquals($clients->pluck('nom')->toArray(), array_column($responseData['clients'], 'nom'));
+        $this->assertEquals($clients->map->identifier()->toArray(), array_column($responseData['clients'], 'nom'));
 
         // Assert livreurs
         $this->assertCount(2, $responseData['livreurs']);
         $this->assertEquals($livreurs->pluck('id')->toArray(), array_column($responseData['livreurs'], 'id'));
-        $this->assertEquals($livreurs->pluck('nom')->toArray(), array_column($responseData['livreurs'], 'nom'));
+        $this->assertEquals($livreurs->map->identifier()->toArray(), array_column($responseData['livreurs'], 'nom'));
 
         // Assert abonnements
         $this->assertCount(2, $responseData['abonnements']);

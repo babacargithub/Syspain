@@ -16,13 +16,6 @@ use Tests\TestCase;
 class ProdPanetierControllerTest extends TestCase
 {
     use RefreshDatabase;
-    private ?Boulangerie $boulangerie;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->boulangerie = Boulangerie::factory()->create();
-    }
 
     public function test_index_returns_all_productions()
     {
@@ -206,7 +199,7 @@ class ProdPanetierControllerTest extends TestCase
     public function test_production_panetier_endpoint_returns_correct_structure()
     {
         // Seed the database or create the necessary records
-        $boulangerie = Boulangerie::factory()->create();
+        $boulangerie = $this->boulangerie;
         $livreur = Livreur::factory()->make();
         $livreur->boulangerie()->associate($boulangerie);
         $livreur->save();

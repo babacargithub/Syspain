@@ -37,10 +37,7 @@ class DevDatabaseSeeder extends Seeder
         // run company seeder
         $company = Company::factory()->create();
 
-        $boulangerie = Boulangerie::factory()->create([
-            "company_id" => $company->id,
-            "nom" => "Boulangerie Lamam 1",
-        ]);
+        $boulangerie = Boulangerie::factory()::mockActiveBoulangerie();
         $boulangerie->save();
         $boulangerie->refresh();
         // caisse

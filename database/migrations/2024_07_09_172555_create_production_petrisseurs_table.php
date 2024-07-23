@@ -15,11 +15,14 @@ return new class extends Migration
         Schema::create('production_petrisseurs', function (Blueprint $table) {
             $table->id();
             $table->foreignIdFor(Boulangerie::class);
-            $table->date('date_production')->nullable(false)->default(today()->toDateString());
-            $table->integer('nombre_sac')->default(0);
+            $table->date('date_production')->nullable(false)
+                ->unique()
+                ->default(today()->toDateString());
+            $table->integer('nombre_sac');
             $table->integer('nombre_chariot')->default(0);
             $table->integer('nombre_plat')->default(0);
             $table->integer('nombre_pain')->default(0);
+            $table->integer('rendement')->default(0);
             $table->timestamps();
         });
     }
@@ -29,6 +32,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('production_patrissiers');
+        Schema::dropIfExists('production_petrisseurs');
     }
 };

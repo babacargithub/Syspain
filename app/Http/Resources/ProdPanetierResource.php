@@ -17,8 +17,10 @@ class ProdPanetierResource extends JsonResource
     public function toArray(Request $request): array
     {
         /** @var $this ProductionPanetier */
-        return [
+        $definition = [
             "id" => $this->id,
+            "nombre_petrisseur" => $this->getCorrespondingProdPetrisseur() !== null ?
+                $this->getCorrespondingProdPetrisseur()->total_pain : 0,
             "date_production" => $this->date_production,
             "identifier" => $this->identifier(),
             "nombre_pain" => $this->nombre_pain,
@@ -30,9 +32,6 @@ class ProdPanetierResource extends JsonResource
             "total_pain_petrisseur_produit" => $this->total_pain_petrisseur_produit,
             "nombre_pain_entregistre" => $this->nombre_pain_entregistre,
             "total_pain_distribue" => $this->total_pain_distribue,
-            //TODO change later
-
-            "resultat"=>2340403,
 
             "chariots" => $this->chariots->map(function (ChariotProdPanetier $chariotProdPanetier) {
                 return [
@@ -43,5 +42,7 @@ class ProdPanetierResource extends JsonResource
             }),
             "mange" => $this->mange,
         ];
+        $definition['resultat'] = $definition['nombre_petrisseur'] - $definition['nombre_pain_entregistre'];
+        return $definition;
     }
 }

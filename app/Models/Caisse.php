@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\DB;
  */
 class Caisse extends Model
 {
+    use BoulangerieScope;
+
     use HasFactory;
 
     protected $fillable = ["nom", "solde","boulangerie_id"

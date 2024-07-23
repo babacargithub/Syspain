@@ -19,12 +19,15 @@ class RecetteController extends Controller
      */
     public function index()
     {
-        $recettes = Recette::with('typeRecette')->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)->get()->map
+        $recettes = Recette::with('typeRecette')->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)
+            ->orderByDesc('created_at')->get()
+            ->map
         (function ($recette) {
             return [
                 'id' => $recette->id,
                 'identifier' => $recette->identifier(),
                 "montant" => $recette->montant,
+                'commentaire'=>$recette->commentaire,
                 "created_at" => $recette->created_at,
 
             ];
@@ -34,12 +37,15 @@ class RecetteController extends Controller
 
     public function recettesJour($date)
     {
-        $recettes = Recette::with('typeRecette')->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)->whereDate('created_at', $date)->get()->map
+        $recettes = Recette::with('typeRecette')
+            ->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)
+            ->orderByDesc('created_at')->whereDate('created_at', $date)->get()->map
         (function ($recette) {
             return [
                 'id' => $recette->id,
                 'identifier' => $recette->identifier(),
                 "montant" => $recette->montant,
+                'commentaire'=>$recette->commentaire,
                 "created_at" => $recette->created_at,
 
             ];
@@ -60,10 +66,12 @@ class RecetteController extends Controller
             'montant' => 'required|numeric|min:10',
             'type_recette_id' => 'required|exists:type_recettes,id',
             'commentaire' => 'nullable|string',
-            "caisse_id" => "required|exists:caisses,id",
+            "caisse_id" => "exists:caisses,id",
             // Add other fields as necessary
         ]);
-
+        if (!isset($validated['caisse_id'])) {
+            $validated['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
+        }
         $recette = new Recette($validated);
         $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
         DB::transaction(function () use ($recette) {

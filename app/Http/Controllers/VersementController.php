@@ -27,10 +27,21 @@ class VersementController extends Controller
             'montant' => 'required|numeric',
             'nombre_retour' => 'required|integer',
             'nombre_pain_matin' => 'required|integer',
-            "caisse_id"=>"required|integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
+            "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
             "date_versement"=>"required|date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
-            'livreur_id' => 'required|integer|exists:livreurs,id',
+            'livreur_id' => 'integer|exists:livreurs,id',
+            'client_id' => 'integer|exists:clients,id',
+            'abonnement_id' => 'integer|exists:abonnements,id',
+            'boutique_id' => 'integer|exists:boutiques,id',
         ]);
+        if (!isset($data['caisse_id'])){
+            $data['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
+        }
+        // if neither livreur_id, client_id, abonnement_id, boutique_id is set, then it's a 422 error
+        if (!isset($data['livreur_id']) && !isset($data['client_id']) && !isset($data['abonnement_id']) && !isset($data['boutique_id'])){
+            return response()->json(['message' => 'Vous devez choisir un livreur, un client, un abonnement ou une 
+            boutique'], 422);
+        }
         $versement = new Versement($data);
         $montant_verse = $data['montant'];
 
@@ -93,16 +104,17 @@ class VersementController extends Controller
     public function update(Versement $versement)
     {
         $data = request()->validate([
-            'montant' => 'required|numeric',
-            'nombre_retour' => 'required|integer',
-            'nombre_pain_matin' => 'required|integer',
-            "caisse_id"=>"required|integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
-            "date_versement"=>"required|date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
+            'montant' => 'numeric',
+            'nombre_retour' => 'integer',
+            'nombre_pain_matin' => 'integer',
+            "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
+            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
             'livreur_id' => 'nullable|integer|exists:livreurs,id',
             'client_id' => 'nullable|integer|exists:clients,id',
             'abonnement_id' => 'nullable|integer|exists:abonnements,id',
             'boutique_id' => 'nullable|integer|exists:boutiques,id',
         ]);
+
         DB::transaction(function () use ($data, $versement) {
             $versement->montant_verse = $data['montant'];
             $versement->nombre_retour = $data['nombre_retour'];
@@ -180,7 +192,25 @@ class VersementController extends Controller
     public function versementsDate($date){
 
         $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
-        $versements = $boulangerie->versements()->whereDate('created_at',$date)->get();
-        return response()->json(VersementResource::collection($versements));
+        // group versements by livreur, client, boutique, abonnement
+        $livreurs = $boulangerie->versements()->whereDate('created_at',$date)->where('livreur_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+        $clients = $boulangerie->versements()->whereDate('created_at',$date)->where('client_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+        $abonnements = $boulangerie->versements()->whereDate('created_at',$date)->where('abonnement_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+        $boutiques = $boulangerie->versements()->whereDate('created_at',$date)->where('boutique_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'livreurs' => VersementResource::collection($livreurs),
+            'clients' => VersementResource::collection($clients),
+            'abonnements' => VersementResource::collection($abonnements),
+            'boutiques' => VersementResource::collection($boutiques),
+        ]);
     }
 }

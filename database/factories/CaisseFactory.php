@@ -25,7 +25,7 @@ class CaisseFactory extends Factory
         ];
         // if env is testing, we can add the following fields
         if (app()->environment('testing')) {
-            $definition["boulangerie_id"] =  Boulangerie::factory();
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
         }
         return $definition;
     }

@@ -19,7 +19,7 @@ class LivreurFactory extends Factory
             'telephone' => $this->faker->phoneNumber(),
         ];
         if (app()->environment('testing')) {
-            $definition["boulangerie_id"] =  Boulangerie::factory();
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
         }
         return $definition;
     }

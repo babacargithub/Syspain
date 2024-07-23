@@ -125,7 +125,7 @@ class VersementControllerTest extends TestCase
     public function test_returns_versements_for_a_specific_date()
     {
         // Arrange
-        $boulangerie = Boulangerie::factory()->create();
+        $boulangerie = $this->boulangerie;
         $this->actingAsUserWithBoulangerie($boulangerie); // Assume this method sets the logged-in user's boulangerie
 
         $date = Carbon::today()->toDateString();

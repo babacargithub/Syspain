@@ -29,7 +29,8 @@ class DepenseController extends Controller
     {
         return Depense::whereHas("caisse",function (Builder $query){
             $query->where("boulangerie_id", Boulangerie::requireBoulangerieOfLoggedInUser()->id);
-        })->whereDate('created_at',$date)->get()->map(function (Depense $depense){
+        })->whereDate('created_at',$date)
+            ->orderByDesc('created_at')->get()->map(function (Depense $depense){
             return [
                 "depense"=>$depense->typeDepense->nom,
                 "montant"=>$depense->montant,
@@ -126,4 +127,6 @@ class DepenseController extends Controller
 
         return response()->json(null, 204);
     }
+
+
 }

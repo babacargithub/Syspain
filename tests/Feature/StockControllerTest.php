@@ -12,18 +12,6 @@ class StockControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected ?User $user;
-    protected ?Boulangerie $boulangerie;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        // Assuming you have a User factory and Boulangerie factory
-        $this->user = User::factory()->create();
-        $this->boulangerie = Boulangerie::factory()->create();
-
-        $this->actingAs($this->user);
-    }
 
     public function test_entreeStock_creates_new_stock_entries()
     {

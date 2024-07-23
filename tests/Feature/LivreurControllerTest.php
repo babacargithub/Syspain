@@ -12,18 +12,6 @@ class LivreurControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected $user;
-    protected $boulangerie;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->user = User::factory()->create();
-        $this->actingAs($this->user);
-
-        $this->boulangerie = Boulangerie::factory()->create();
-    }
 
     public function test_index_returns_all_livreurs()
     {

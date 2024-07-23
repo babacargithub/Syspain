@@ -14,26 +14,6 @@ use Tests\TestCase;
 class PetrisseurControllerTest extends TestCase
 {
     use RefreshDatabase;
-    private ?User $user;
-    protected ?Boulangerie $boulangerie;
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // Create and authenticate a user
-        $this->user = User::factory()->create();
-        $this->actingAs($this->user);
-
-
-        // Create a company and a boulangerie
-        $company = Company::factory()->create();
-        $boulangerie = Boulangerie::factory()->create(['company_id' => $company->id]);
-        $this->boulangerie = $boulangerie;
-
-        // Associate the authenticated user with the boulangerie
-//        Auth::shouldReceive('user')->andReturn($user);
-//        $user->boulangeries()->attach($boulangerie);
-    }
 
     public function test_index_returns_all_productions()
     {

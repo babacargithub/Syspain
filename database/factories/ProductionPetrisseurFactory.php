@@ -19,7 +19,7 @@ class ProductionPetrisseurFactory extends Factory
     public function definition(): array
     {
         $definition = [
-            "date_production" => today()->toDateString(),
+            "date_production" => $this->faker->date(),
             "nombre_chariot" => $this->faker->numberBetween(1, 100),
             "nombre_pain" => $this->faker->numberBetween(3000, 9000),
             "nombre_plat" => $this->faker->numberBetween(1, 100),
@@ -28,7 +28,7 @@ class ProductionPetrisseurFactory extends Factory
             //
         ];
         if (app()->environment('testing')) {
-            $definition["boulangerie_id"] =  Boulangerie::factory();
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
         }
         return $definition;
     }

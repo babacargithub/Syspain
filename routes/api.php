@@ -10,6 +10,9 @@ use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
 use App\Models\Chariot;
+use App\Models\Depense;
+use App\Models\TypeDepense;
+use App\Models\TypeRecette;
 use Illuminate\Support\Facades\Route;
 Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
 Route::resource('petrisseurs', PetrisseurController::class);
@@ -50,6 +53,22 @@ Route::get('chariots',function (){
         ];
     }));
 
+});
+Route::get('types_depenses_recettes',function (){
+    return response()->json([
+        'type_depenses' => TypeDepense::all()->map(function (TypeDepense $depense){
+            return [
+                'id' => $depense->id,
+                'nom' => $depense->nom,
+            ];
+        }),
+        'type_recettes' => TypeRecette::all()->map(function (TypeRecette $recette){
+            return [
+                'id' => $recette->id,
+                'nom' => $recette->nom,
+            ];
+        }),
+    ]);
 });
 
 

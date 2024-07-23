@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Versement extends Model
 {
     use HasFactory;
+//    use BoulangerieScope;
+
     protected $fillable = [
         'nombre_pain_matin',
         'nombre_pain_soir',
@@ -16,6 +19,9 @@ class Versement extends Model
         'compte_data',
         'montant_verse',
         'livreur_id',
+        'client_id',
+        'boutique_id',
+        'abonnement_id',
         'date_versement',
         'prix_unit',
         'boulangerie_id',

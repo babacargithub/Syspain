@@ -13,20 +13,6 @@ class IntrantControllerTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected $user;
-    protected $boulangerie;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // Assuming you have a User factory and Boulangerie factory
-        $this->user = User::factory()->create();
-        $this->boulangerie = Boulangerie::factory()->create();
-
-        $this->actingAs($this->user);
-    }
-
     public function test_index_returns_all_intrants()
     {
           Intrant::factory()->count(3)->create(['boulangerie_id' => $this->boulangerie->id]);

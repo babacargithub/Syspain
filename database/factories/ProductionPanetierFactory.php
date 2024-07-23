@@ -25,7 +25,7 @@ class ProductionPanetierFactory extends Factory
 
         ];
         if (app()->environment('testing')) {
-            $definition["boulangerie_id"] =  Boulangerie::factory();
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
         }
         return $definition;
     }

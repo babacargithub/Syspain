@@ -20,8 +20,7 @@ class DepenseControllerTest extends TestCase
     public function test_index_returns_all_depenses()
     {
 
-        $user = User::factory()->create();
-        $this->actingAs($user);
+
         $response = $this->getJson('/api/depenses');
 
         $response->assertStatus(200);
@@ -31,6 +30,7 @@ class DepenseControllerTest extends TestCase
     {
 
         $typeDepense = TypeDepense::factory()->create();
+
         $user = User::factory()->create();
 
         $this->actingAs($user);
@@ -56,7 +56,7 @@ class DepenseControllerTest extends TestCase
 
     public function test_show_returns_depense_by_id()
     {
-        $depense = Depense::factory()->create(["boulangerie_id"=>Boulangerie::requireBoulangerieOfLoggedInUser()->id]);
+        $depense = Depense::factory()->create(["boulangerie_id"=>$this->boulangerie->id]);
 
         $this->actingAs(User::factory()->create());
         $response = $this->getJson('/api/depenses/' . $depense->id);
@@ -67,7 +67,7 @@ class DepenseControllerTest extends TestCase
 
     public function test_update_modifies_existing_depense()
     {
-        $depense = Depense::factory()->create(["montant" => 10000,"boulangerie_id"=>Boulangerie::requireBoulangerieOfLoggedInUser()->id]);
+        $depense = Depense::factory()->create(["montant" => 10000,"boulangerie_id"=>$this->boulangerie->id]);
         $caisse = Caisse::find($depense->caisse_id);
         $caisse->solde = 40000;
         $caisse->save();
@@ -88,7 +88,7 @@ class DepenseControllerTest extends TestCase
 
     public function test_destroy_deletes_depense()
     {
-        $depense = Depense::factory()->create(["boulangerie_id"=>Boulangerie::requireBoulangerieOfLoggedInUser()->id]);
+        $depense = Depense::factory()->create(["boulangerie_id"=>$this->boulangerie->id]);
 
 //        $this->actingAs($depense->caisse->boulangerie->user);
         $response = $this->deleteJson('/api/depenses/' . $depense->id);
@@ -100,7 +100,7 @@ class DepenseControllerTest extends TestCase
     public function test_returns_depenses_for_a_specific_date()
     {
         // Arrange
-        $boulangerie = Boulangerie::factory()->create();
+        $boulangerie = $this->boulangerie;
         $caisse = Caisse::factory()->create(['boulangerie_id' => $boulangerie->id]);
         $typeDepense = TypeDepense::factory()->create(['nom' => 'Achat café']);
         $date = Carbon::today()->toDateString();
@@ -129,4 +129,5 @@ class DepenseControllerTest extends TestCase
             'commentaire' => 'Achat café'
         ]]);
     }
+
 }
