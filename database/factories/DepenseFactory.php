@@ -16,8 +16,8 @@ class DepenseFactory extends Factory
     {
         $definition= [
             'type_depense_id' => TypeDepense::factory(),
-            'montant' => $this->faker->randomNumber(),
-            'commentaire' => $this->faker->word(),
+            'montant' => $this->faker->numberBetween(1000, 1000000),
+            'commentaire' => $this->faker->sentence(10),
         ];
         if (app()->environment('testing')) {
             $definition["caisse_id"] =  Caisse::requireCaisseOfLoggedInUser();

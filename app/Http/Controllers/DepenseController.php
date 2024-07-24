@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\OperationCaisseResource;
 use App\Models\Boulangerie;
 use App\Models\Caisse;
 use App\Models\Depense;
@@ -22,21 +23,16 @@ class DepenseController extends Controller
         $depenses = Depense::whereHas("caisse",function (Builder $query){
             $query->where("boulangerie_id", Boulangerie::requireBoulangerieOfLoggedInUser()->id);
         })->get();
-        return response()->json($depenses);
+        return response()->json(OperationCaisseResource::collection($depenses));
     }
 
     public function depensesDate($date)
     {
-        return Depense::whereHas("caisse",function (Builder $query){
+        $depenses =  Depense::whereHas("caisse",function (Builder $query){
             $query->where("boulangerie_id", Boulangerie::requireBoulangerieOfLoggedInUser()->id);
         })->whereDate('created_at',$date)
-            ->orderByDesc('created_at')->get()->map(function (Depense $depense){
-            return [
-                "depense"=>$depense->typeDepense->nom,
-                "montant"=>$depense->montant,
-                "commentaire"=>$depense->commentaire
-            ];
-        });
+            ->orderByDesc('created_at')->get();
+        return response()->json(OperationCaisseResource::collection($depenses));
 
     }
 
@@ -92,8 +88,10 @@ class DepenseController extends Controller
             $previousAmount = $depense->montant;
             $validatedData = $request->validate([
                 'montant' => 'numeric',
+                'type_depense_id' => 'integer|exists:type_depenses,id',
                 "commentaire"=>"nullable|string",
             ]);
+            $depense->update($validatedData);
             $caisse = $depense->caisse;
             $shouldIncreaseSoldeCaisse = $validatedData['montant'] > $previousAmount;
             $shouldDecreaseSoldeCaisse = $validatedData['montant'] < $previousAmount;
@@ -102,8 +100,6 @@ class DepenseController extends Controller
             }else if ($shouldDecreaseSoldeCaisse){
                 $caisse->diminuerSolde($previousAmount - $validatedData['montant']);
             }
-
-            $depense->update($validatedData);
             $caisse->save();
         });
 

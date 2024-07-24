@@ -21,9 +21,12 @@ class RecetteFactory extends Factory
     public function definition(): array
     {
         return [
-            "montant" => $this->faker->randomNumber(7),
+
+            'montant' => $this->faker->numberBetween(100, 1000000),
             "type_recette_id" => TypeRecette::factory(),
             "boulangerie_id" => Boulangerie::factory(),
+            'commentaire' => $this->faker->sentence(15),
+
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\OperationCaisseResource;
 use App\Models\Boulangerie;
 use App\Models\Caisse;
 use App\Models\Recette;
@@ -39,18 +40,8 @@ class RecetteController extends Controller
     {
         $recettes = Recette::with('typeRecette')
             ->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)
-            ->orderByDesc('created_at')->whereDate('created_at', $date)->get()->map
-        (function ($recette) {
-            return [
-                'id' => $recette->id,
-                'identifier' => $recette->identifier(),
-                "montant" => $recette->montant,
-                'commentaire'=>$recette->commentaire,
-                "created_at" => $recette->created_at,
-
-            ];
-        });
-        return response()->json($recettes);
+            ->orderByDesc('created_at')->whereDate('created_at', $date)->get();
+        return response()->json(OperationCaisseResource::collection($recettes));
 
     }
 
@@ -82,6 +73,34 @@ class RecetteController extends Controller
         });
         $recette->refresh();
         return response()->json($recette, 201);
+    }
+    // update function
+    public function update(Recette $recette)
+    {
+        $validated = request()->validate([
+            'montant' => 'numeric|min:10',
+            'type_recette_id' => 'exists:type_recettes,id',
+            'commentaire' => 'nullable|string',
+            // Add other fields as necessary
+        ]);
+
+
+        // update caisse solde
+        DB::transaction(function () use ($validated,$recette) {
+            $diff = $validated['montant'] > $recette->montant ? $validated['montant'] - $recette->montant : $recette->montant - $validated['montant'];
+
+            $recette->update($validated);
+            $caisse = Caisse::requireCaisseOfLoggedInUser();
+            // calculate the difference between the old and new montant and update caisse accordingly
+            if ($validated['montant'] > $recette->montant) {
+                $caisse->augmenterSolde($diff);
+            } else {
+                $caisse->diminuerSolde($diff);
+            }
+            $recette->save();
+            $caisse->augmenterSolde($recette->montant);
+        });
+        return response()->json($recette);
     }
 
     /**
