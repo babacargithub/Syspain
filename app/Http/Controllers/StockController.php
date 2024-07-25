@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Boulangerie;
 use App\Models\Intrant;
+use App\Models\MouveIntrant;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class StockController extends Controller
@@ -26,19 +29,38 @@ class StockController extends Controller
                    "nom" => "Stock de " . $intrant->nom. ": du ".now()->format('Y-m-d H:i'),
                    "code_bar" => now()->timestamp, // generate a unique code bar (timestamp
                    "prix_achat" => $intrantData['prix_achat'],
-                   "boulangerie_id" => $intrant->boulangerie_id
+                   "boulangerie_id" => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+               ]);
+
+               $stock->mouvements()->create([
+                   "quantite" => $intrantData['quantite'],
+                   "stock_avant" => 0,
+                   "stock_apres" => $intrantData['quantite'],
+                   "type" => "in",
+                   "metadata" => $stock->toArray(),
+                   'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id
                ]);
 
            }else {
                $stock->update([
-                   "quantite" => $intrantData['quantite'],
+                   "quantite" => $stock->quantite + $intrantData['quantite'],
                    "nom" => "Stock de " . $intrant->nom . ": du " . now()->format('Y-m-d H:i'),
                    "code_bar" => now()->timestamp, // generate a unique code bar (timestamp
                    "prix_achat" => $intrantData['prix_achat'],
-                   "boulangerie_id" => $intrant->boulangerie_id
+                   "boulangerie_id" => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+
                ]);
+                $stock->mouvements()->create([
+                     "quantite" => $intrantData['quantite'],
+                     "stock_avant" => $stock->quantite - $intrantData['quantite'],
+                     "stock_apres" => $stock->quantite,
+                     "type" => "in",
+                     "metadata" => $stock->toArray(),
+                        'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+                ]);
            }
         }
+        return response()->json(["message"=>"Stock mis à jour"], 201);
     }
     public function sortieStock(Intrant $intrant)
     {
@@ -55,6 +77,30 @@ class StockController extends Controller
         $stock->diminuerStock($validatedData['quantite']);
         $stock->save();
 
+    }
+    /**
+     * Get movements for a specific intrant.
+     *
+     * @param Intrant $intrant
+     * @return JsonResponse
+     */
+    public function getMovements(Intrant $intrant)
+    {
+        $movements = MouveIntrant::whereHas('stockIntrant', function($query) use ($intrant) {
+            $query->where('intrant_id', $intrant->id);
+        })->orderByDesc('created_at')->get()->map(function ($movement) {
+            return [
+                'id' => $movement->id,
+                'type' => $movement->type,
+                'quantite' => $movement->quantite,
+                'stock_avant' => $movement->stock_avant,
+                'stock_apres' => $movement->stock_apres,
+                'created_at' => $movement->created_at->toDateTimeString(),
+                'metadata' => $movement->metadata,
+            ];
+        });
+
+        return response()->json($movements);
     }
 
 

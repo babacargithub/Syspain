@@ -17,6 +17,7 @@ class Client extends Model
         'prenom',
         'nom',
         "boulangerie_id",
+        'is_active',
         'telephone',
     ];
     public function boulangerie(): BelongsTo

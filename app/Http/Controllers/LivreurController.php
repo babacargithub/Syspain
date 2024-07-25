@@ -38,6 +38,8 @@ class LivreurController extends Controller
         ]);
 
         $livreur = new Livreur($validatedData);
+        $livreur->is_active = true;
+        $livreur->prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
         $livreur->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
         $livreur->save();
         $livreur->compteLivreur()->create();

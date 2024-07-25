@@ -2,6 +2,8 @@
 namespace Database\Seeders;
 
 use App\Models\Abonnement;
+use App\Models\Article;
+use App\Models\ArticleProdPatisserie;
 use App\Models\Boulangerie;
 use App\Models\Boutique;
 use App\Models\Caisse;
@@ -15,6 +17,7 @@ use App\Models\Depense;
 use App\Models\Intrant;
 use App\Models\Livreur;
 use App\Models\MouveIntrant;
+use App\Models\ProdPatisserie;
 use App\Models\Recette;
 use App\Models\TypeDepense;
 use App\Models\TypeRecette;
@@ -99,6 +102,8 @@ class DevDatabaseSeeder extends Seeder
             ->for($boulangerie)
             ->make());
         $boulangerie->save();
+
+        Article::factory()->count(50)->for($boulangerie)->create();
         // other data to seed
         // production pétrissier
         // chariot prod petrisseur
@@ -106,6 +111,16 @@ class DevDatabaseSeeder extends Seeder
         // chariot prod panetier
         // distribution panetier
 
+        $prodPatisserie = ProdPatisserie::factory()->for($boulangerie)->create();
+        $items = Article::all()->map(function (Article $article) use($prodPatisserie){
+            return [
+                "article_id"=>$article->id,
+                "prod_patisserie_id"=>$prodPatisserie->id,
+                'quantite' => rand(1, 100),
+            ];
+        });
+
+        ArticleProdPatisserie::insert($items->toArray());
 
 
 

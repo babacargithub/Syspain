@@ -1,0 +1,5105 @@
+I have a Laravel app with version 11.14.0
+
+Here are my Models:
+Abonnement.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Abonnement extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'date_debut',
+        'date_fin',
+        'type',
+        'prix',
+    ];
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
+    public function identifier() :string
+    {
+        return 'Abonnement de '. $this->client->identifier();
+
+    }
+}
+
+
+Article.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Article extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = [
+        'nom',
+        'prix',
+        'boulangerie_id',
+    ];
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+}
+
+
+ArticleProdPatisserie.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class ArticleProdPatisserie extends Model
+{
+    use HasFactory;
+}
+
+
+Boulangerie.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Boulangerie extends Model
+{
+    use HasFactory;
+    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client"];
+
+    public static function requireBoulangerieOfLoggedInUser(): Boulangerie
+    {
+        if (app()->runningUnitTests()) {
+            return Boulangerie::factory()::mockActiveBoulangerie();
+        }
+        // TODO change this to the actual user
+        return  Boulangerie::first() ?? Boulangerie::factory()->create();
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+    public function caisses(): HasMany
+    {
+        return $this->hasMany(Caisse::class);
+    }
+    public function chariots(): HasMany
+    {
+        return $this->hasMany(Chariot::class);
+    }
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
+    }
+
+    public function boutiques(): HasMany
+    {
+        return $this->hasMany(Boutique::class);
+    }
+    public function livreurs(): HasMany
+    {
+        return $this->hasMany(Livreur::class);
+    }
+
+    public function versements(): HasMany
+    {
+        return $this->hasMany(Versement::class);
+    }
+    public function typeDepenses(): HasMany
+    {
+        return $this->hasMany(TypeDepense::class);
+    }
+    public function typeRecettes(): HasMany
+    {
+        return $this->hasMany(TypeRecette::class);
+    }
+    public function recettes(): HasMany
+    {
+        return $this->hasMany(Recette::class);
+    }
+    public function abonnements(): HasMany
+    {
+        return $this->hasMany(Abonnement::class);
+    }
+
+
+}
+
+
+Boutique.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Boutique extends Model
+{
+    use BoulangerieScope;
+    use HasFactory;
+    protected $fillable = ["nom", "boulangerie_id", "solde_pain", "adresse"];
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    public function identifier(): string
+    {
+        return  $this->nom;
+
+    }
+}
+
+
+Caisse.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * @property int $solde
+ */
+class Caisse extends Model
+{
+    use BoulangerieScope;
+
+    use HasFactory;
+
+    protected $fillable = ["nom", "solde","boulangerie_id"
+    ];
+
+    public static function requireCaisseOfLoggedInUser(): Caisse
+    {
+        // TODO implement this method
+        $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
+        return Caisse::firstOrCreate([
+            "nom" => "Caisse Principale ",
+            "boulangerie_id" => $boulangerie->id
+        ]);
+    }
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(CaisseTransaction::class);
+    }
+    public function identifier() : string
+    {
+        return strtoupper($this->nom). ' : '.$this->boulangerie->nom.', solde:  ' . $this->solde;
+    }
+
+    public function augmenterSolde(int $montant, array $metadata = []): self
+    {
+        $this->solde += $montant;
+        DB::transaction(function () use ($montant, $metadata) {
+            $this->save();
+            $this->saveTransaction('cashin',$montant,$this->solde - $montant, $metadata);
+        });
+
+        return  $this;
+    }
+    public function diminuerSolde(int $montant, array $metadata = []): self
+    {
+        $solde_avant = (int)$this->solde;
+        $this->solde -= $montant;
+        DB::transaction(function () use ($montant,$solde_avant, $metadata) {
+            $this->save();
+            $this->saveTransaction('cashout',$montant,($solde_avant), $metadata);
+        });
+
+        return  $this;
+    }
+
+    public function getSoldeCaisseAtDateTime(\DateTime $dateTime): int
+    {
+        return $this->transactions()
+            ->whereDate('created_at', '<=', $dateTime->format('Y-m-d'))->latest()->first()->solde_apres ?? 0;
+    }
+    protected function saveTransaction($type,$montant,$solde_avant,array $metadata): self
+    {
+        $transaction = new CaisseTransaction($metadata);
+        $transaction->type = $type;
+        $transaction->commentaire = $metadata['commentaire'] ?? null;
+        $transaction->metadata = $metadata['metadata'] ?? [];
+        $transaction->montant = $montant;
+        $transaction->solde_avant = $solde_avant;
+        $transaction->solde_apres = $this->solde;
+        $this->transactions()->save($transaction);
+        return $this;
+    }
+    public function recettes() : HasMany
+    {
+        return $this->hasMany(Recette::class);
+    }
+    public function depenses() : HasMany
+    {
+        return $this->hasMany(Depense::class);
+    }
+
+}
+
+
+CaisseTransaction.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class CaisseTransaction extends Model
+{
+    use HasFactory;
+    protected $fillable =["caisse_id",
+    "type",
+    "montant",
+    "commentaire",
+    "user_id",
+    "solde_avant",
+    "solde_apres",
+    "metadata"];
+
+    public function caisse(): BelongsTo
+    {
+        return $this->belongsTo(Caisse::class);
+    }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+    protected $casts = [
+        'metadata' => 'array'
+    ];
+}
+
+
+CategorieOuvrier.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class CategorieOuvrier extends Model
+{
+    use HasFactory;
+}
+
+
+Chariot.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Chariot extends Model
+{
+    use BoulangerieScope;
+
+    use HasFactory;
+    protected $fillable = ["nom","nombre_pain","boulangerie_id"];
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    public function identifier(): string
+    {
+        return "Chariot ".$this->nombre_pain." pains";
+    }
+}
+
+
+ChariotProdPanetier.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ChariotProdPanetier extends Model
+{
+    use HasFactory;
+    protected $table = 'chariot_prod_panetiers';
+    protected $fillable = ['production_panetier_id', 'chariot_id',"nombre"];
+    public function productionPanetier(): BelongsTo
+    {
+        return $this->belongsTo(ProductionPanetier::class);
+    }
+    public function chariot(): BelongsTo
+    {
+        return $this->belongsTo(Chariot::class);
+    }
+}
+
+
+ChariotProdPetrisseur.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class ChariotProdPetrisseur extends Model
+{
+    use HasFactory;
+}
+
+
+Client.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+class Client extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+    protected $fillable = [
+        'prenom',
+        'nom',
+        "boulangerie_id",
+        'is_active',
+        'telephone',
+    ];
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+
+    }
+    public function compteClient(): HasOne
+    {
+        return $this->HasOne(CompteClient::class);
+    }
+    public function abonnement(): HasOne
+    {
+        return $this->HasOne(Abonnement::class);
+    }
+    public function identifier() : string
+    {
+        return strtoupper($this->prenom . ' ' . $this->nom . ' : ' ). $this->telephone;
+    }
+}
+
+
+Company.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Company extends Model
+{
+    use HasFactory;
+
+    public static function requireCompanyOfLoggedInUser()
+    {
+        //TODO: Implement this method
+        return Company::first()??Company::factory()->create();
+    }
+
+    public function boulangeries(): HasMany
+    {
+        return $this->hasMany(Boulangerie::class);
+    }
+
+}
+
+
+CompteClient.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class CompteClient extends Model
+{
+    use HasFactory;
+    protected $fillable = [
+        'solde_pain',
+        'dette',
+        'solde_reliquat',
+    ];
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+}
+
+
+CompteLivreur.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class CompteLivreur extends Model
+{
+    use HasFactory;
+    protected $fillable = [
+        'solde_pain',
+        'dette',
+        'solde_reliquat',
+    ];
+    public function livreur(): BelongsTo
+    {
+        return $this->belongsTo(Livreur::class);
+    }
+    public function augmenterSoldePain(int $nombre_pain): self
+    {
+        $this->solde_pain += $nombre_pain;
+        return $this;
+    }
+    public function diminuerSoldePain(int $nombre_pain): self
+    {
+        $this->solde_pain -= $nombre_pain;
+        return $this;
+    }
+    public function augmenterDette(int $dette): self
+    {
+        $this->dette += $dette;
+        return $this;
+    }
+    public function diminuerDette(int $dette): self
+    {
+        $this->dette -= $dette;
+        return $this;
+    }
+    public function augmenterSoldeReliquat(int $solde_reliquat): self
+    {
+        $this->solde_reliquat += $solde_reliquat;
+        return $this;
+    }
+    public function diminuerSoldeReliquat(int $solde_reliquat): self
+    {
+        $this->solde_reliquat -= $solde_reliquat;
+        return $this;
+    }
+}
+
+
+Depense.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Depense extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+
+    protected $fillable = [
+        'type_depense_id',
+        'montant',
+        'commentaire',
+        'caisse_id'
+    ];
+    public function typeDepense(): BelongsTo
+    {
+        return $this->belongsTo(TypeDepense::class);
+
+    }
+
+    public function caisse(): BelongsTo
+    {
+        return $this->belongsTo(Caisse::class);
+    }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+}
+
+
+DistribPanetier.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class DistribPanetier extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        "nombre_pain", "livreur_id", "client_id", "boutique_id", "abonnement_id", "production_panetier_id","bonus"
+    ];
+    public function livreur(): BelongsTo
+    {
+        return $this->belongsTo(Livreur::class);
+
+    }
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+    public function boutique(): BelongsTo
+    {
+        return $this->belongsTo(Boutique::class);
+    }
+    public function abonnement(): BelongsTo
+    {
+        return $this->belongsTo(Abonnement::class);
+    }
+    public function productionPanetier(): BelongsTo
+    {
+        return $this->belongsTo(ProductionPanetier::class);
+    }
+
+    public function isForLivreur(): bool
+    {
+        return $this->livreur_id !== null;
+    }
+    public function isForClient(): bool
+    {
+        return $this->client_id !== null;
+    }
+    public function isForBoutique(): bool
+    {
+        return $this->boutique_id !== null;
+    }
+
+    public function isForAbonnement(): bool
+    {
+        return $this->abonnement_id !== null;
+    }
+}
+
+
+Intrant.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+class Intrant extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+    protected $fillable = ["nom"];
+
+    public function stock(): HasOne
+    {
+        return $this->hasOne(StockIntrant::class);
+    }
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+
+}
+
+
+Livreur.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+class Livreur extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+    protected $fillable = [
+        'prenom',
+        'nom',
+        'telephone',
+        'boulangerie_id',
+        'prix_pain',
+        "is_active"
+    ];
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    public function compteLivreur(): HasOne
+    {
+        return $this->HasOne(CompteLivreur::class);
+    }
+    public function versements() : HasMany
+    {
+        return $this->hasMany(Versement::class);
+
+    }
+    public function identifier() : string
+    {
+        return strtoupper($this->prenom . ' ' . $this->nom . ' : ' ). $this->telephone;
+
+    }
+}
+
+
+MouveIntrant.php
+<?php
+/**
+ * @noinspection PhpUnused
+ */
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class MouveIntrant extends Model
+{
+    use BoulangerieScope;
+
+    protected $fillable  = ["stock_intrant_id", "boulangerie_id", "quantite", "stock_avant", "stock_apres", "type", "metadata"];
+    use HasFactory;
+
+    public function stockIntrant(): BelongsTo
+    {
+        return $this->belongsTo(StockIntrant::class);
+    }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+
+    protected $casts = ["metadata" => 'array'];
+}
+
+
+Ouvrier.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Ouvrier extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+}
+
+
+ProdPatisserie.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class ProdPatisserie extends Model
+{
+    use HasFactory;
+}
+
+
+ProductionPanetier.php
+<?php
+/**
+ * @noinspection PhpUnused
+
+ */
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Carbon\Carbon;
+use Carbon\Exceptions\InvalidFormatException;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class ProductionPanetier extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+    protected $fillable = [
+        'date_production',
+        'nombre_pain',
+        'nombre_plat',
+        'nombre_sac',
+        "boulangerie_id",
+        "ration",
+        "donation",
+        "casse", "mange",
+        "prix_pain_client",
+        "periode",
+        "prix_pain_livreur",
+        'ration',
+        'donation',
+        'casse',
+        'mange',
+        'periode',
+        'boulangerie_id'
+    ];
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+
+    }
+
+    /**
+     * @return HasMany
+     */
+    public function chariots(): HasMany
+    {
+        return $this->hasMany(ChariotProdPanetier::class, 'production_panetier_id');
+
+    }
+
+    public function distribPanetiers(): HasMany
+    {
+        return $this->hasMany(DistribPanetier::class);
+    }
+    public function getTotalPainPetrisseurProduitAttribute()
+    {
+        return ProductionPetrisseur::whereDateProduction($this->date_production)->sum('nombre_pain');
+
+    }
+    public function getNombrePainEntregistreAttribute()
+    {
+        $nombre_pain_plat = 10; // TODO dynamise this
+        return $this->chariots()
+                ->selectRaw('SUM(chariot_prod_panetiers.nombre * chariots.nombre_pain) as total_nombre_pain')
+                ->join('chariots', 'chariots.id', '=', 'chariot_prod_panetiers.chariot_id')
+                ->where('chariot_prod_panetiers.production_panetier_id', $this->id)
+                ->value('total_nombre_pain') + ($this->nombre_plat * $nombre_pain_plat);
+    }
+    public  function getTotalPainDistribueAttribute()
+    {
+        return $this->distribPanetiers()->sum('nombre_pain')
+            + $this->casse + $this->donation + $this->mange + $this->ration;
+    }
+
+    public function identifier(): string
+    {
+        return 'Cahier Panetier '.strtoupper($this->periode).' du ' . $this->getDateProductionAttribue();
+
+    }
+
+    public function getDateProductionAttribue(): string
+    {
+        try {
+            return Carbon::parse($this->date_production)->format('d-m-Y');
+        } catch (InvalidFormatException $e) {
+            return $this->date_production;
+        }
+
+    }
+    public function getCorrespondingProdPetrisseur() : ?ProductionPetrisseur
+    {
+        return ProductionPetrisseur::ofCurrentBoulangerie()->whereDateProduction($this->date_production)->first();
+
+    }
+    protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];
+}
+
+
+ProductionPetrisseur.php
+<?php
+/**
+ * @noinspection PhpUnused
+ */
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+/**
+ * @property mixed $date_production
+ */
+class ProductionPetrisseur extends Model
+{
+    use BoulangerieScope;
+    use HasFactory;
+    protected $table ="production_petrisseurs";
+    protected $fillable = ["date_production","boulangerie_id","nombre_chariot","nombre_pain","nombre_plat","nombre_sac","rendement"];
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+
+    public function totalPain() : int
+    {
+        // TODO check again later
+        return ($this->rendement * $this->nombre_sac);
+
+    }
+    public function getTotalPainAttribute(): int
+    {
+        return $this->totalPain();
+    }
+
+    protected $appends = ['total_pain'];
+
+
+
+}
+
+
+Recette.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Recette extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+    protected $fillable = ["montant", "type_recette_id","boulangerie_id","caisse_id","commentaire"];
+
+    public function typeRecette(): BelongsTo
+    {
+        return $this->belongsTo(TypeRecette::class);
+    }
+
+    public function identifier(): string
+    {
+        return "Recette : {$this->typeRecette->nom}";
+
+    }
+    public function getIdentifierAttribute(): string
+    {
+        return $this->identifier();
+    }
+    public function caisse(): BelongsTo
+    {
+        return $this->belongsTo(Caisse::class);
+    }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    protected $appends = ["identifier"];
+}
+
+
+StockIntrant.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
+
+class StockIntrant extends Model
+{
+    use HasFactory;
+    use BoulangerieScope;
+
+    protected $fillable = ["nom","intrant_id", "boulangerie_id", "quantite", "prix_achat", "code_bar"];
+
+    public function intrant(): BelongsTo
+    {
+        return $this->belongsTo(Intrant::class);
+    }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    public function augmenterStock(int $quantite): self
+    {
+        $stock_avant = $this->quantite;
+        $this->quantite += $quantite;
+
+        DB::transaction(function () use ($quantite,$stock_avant) {
+            $this->save();
+            $this->saveMouvement('in', $quantite, $stock_avant);
+        });
+        return $this;
+    }
+    public function mouvements() : HasMany
+    {
+        return $this->hasMany(MouveIntrant::class);
+
+    }
+    public function diminuerStock(int $quantite): self
+    {
+        $stock_avant = $this->quantite;
+        $this->quantite -= $quantite;
+        DB::transaction(function () use ($quantite,$stock_avant) {
+            $this->save();
+            $this->saveMouvement('out', $quantite, $stock_avant);
+        });
+        return $this;
+    }
+    public function identifier() : string
+    {
+        return strtoupper($this->intrant->nom). ' : '.$this->quantite;
+    }
+    // save mouvement intrant
+    public function saveMouvement(string $type, int $quantite, int $stock_avant, array $metadata = []): self
+    {
+        $this->mouvements()->create([
+            "type" => $type,
+            "quantite" => $quantite,
+            "stock_avant" => $stock_avant,
+            "stock_apres" => $this->quantite,
+            "metadata" => $metadata,
+            "boulangerie_id"=>$this->boulangerie_id
+        ]);
+        return $this;
+    }
+}
+
+
+TypeDepense.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class TypeDepense extends Model
+{
+    use BoulangerieScope;
+
+    use HasFactory;
+    protected $fillable = ['nom','boulangerie_id'];
+    public $timestamps = false;
+
+    public function depenses(): HasMany
+    {
+        return $this->hasMany(Depense::class);
+    }
+    public function boulangerie() : BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+}
+
+
+TypeRecette.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class TypeRecette extends Model
+{
+    use BoulangerieScope;
+
+    use HasFactory;
+    protected $fillable = ["nom","is_active",'boulangerie_id'];
+
+    public function recettes(): HasMany
+    {
+        return $this->hasMany(Recette::class);
+    }
+   public function boulangerie(): BelongsTo
+   {
+         return $this->belongsTo(Boulangerie::class);
+
+   }
+
+}
+
+
+User.php
+<?php
+
+namespace App\Models;
+
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+class User extends Authenticatable
+{
+    use HasFactory, Notifiable;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array<int, string>
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+        ];
+    }
+}
+
+
+Versement.php
+<?php
+
+namespace App\Models;
+
+use App\Traits\BoulangerieScope;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Versement extends Model
+{
+    use HasFactory;
+//    use BoulangerieScope;
+
+    protected $fillable = [
+        'nombre_pain_matin',
+        'nombre_pain_soir',
+        'nombre_retour',
+        'compte_data',
+        'montant_verse',
+        'livreur_id',
+        'client_id',
+        'boutique_id',
+        'abonnement_id',
+        'date_versement',
+        'prix_unit',
+        'boulangerie_id',
+        'caisse_id',
+    ];
+    public function livreur(): BelongsTo
+    {
+        return $this->belongsTo(Livreur::class);
+    }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+    public function caisse(): BelongsTo
+    {
+        return $this->belongsTo(Caisse::class);
+    }
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+    public function boutique() : BelongsTo
+    {
+        return $this->belongsTo(Boutique::class);
+    }
+    public function abonnement() : BelongsTo
+    {
+        return $this->belongsTo(Abonnement::class);
+    }
+    protected $casts = [
+        'compte_data' => 'array'
+    ];
+
+    public function isForLivreur(): bool
+    {
+        return $this->livreur_id !== null;
+    }
+    public function isForClient(): bool
+    {
+        return $this->client_id !== null;
+    }
+    public function isForBoutique(): bool
+    {
+        return $this->boutique_id !== null;
+    }
+    public function isForAbonnement(): bool
+    {
+        return $this->abonnement_id !== null;
+    }
+
+}
+
+
+
+Here are my Migrations:
+0001_01_01_000000_create_users_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->string('password');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('sessions');
+    }
+};
+
+
+0001_01_01_000001_create_cache_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('cache', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->mediumText('value');
+            $table->integer('expiration');
+        });
+
+        Schema::create('cache_locks', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->string('owner');
+            $table->integer('expiration');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cache');
+        Schema::dropIfExists('cache_locks');
+    }
+};
+
+
+0001_01_01_000002_create_jobs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('queue')->index();
+            $table->longText('payload');
+            $table->unsignedTinyInteger('attempts');
+            $table->unsignedInteger('reserved_at')->nullable();
+            $table->unsignedInteger('available_at');
+            $table->unsignedInteger('created_at');
+        });
+
+        Schema::create('job_batches', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('name');
+            $table->integer('total_jobs');
+            $table->integer('pending_jobs');
+            $table->integer('failed_jobs');
+            $table->longText('failed_job_ids');
+            $table->mediumText('options')->nullable();
+            $table->integer('cancelled_at')->nullable();
+            $table->integer('created_at');
+            $table->integer('finished_at')->nullable();
+        });
+
+        Schema::create('failed_jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->unique();
+            $table->text('connection');
+            $table->text('queue');
+            $table->longText('payload');
+            $table->longText('exception');
+            $table->timestamp('failed_at')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('jobs');
+        Schema::dropIfExists('job_batches');
+        Schema::dropIfExists('failed_jobs');
+    }
+};
+
+
+2024_07_09_0000003_create_companies_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('companies', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->unique();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('companies');
+    }
+};
+
+
+2024_07_09_000004_create_boulangeries_table.php
+<?php
+
+use App\Models\Company;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('boulangeries', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->nullable(false);
+            $table->integer('prix_pain_livreur')->nullable(false)->default(145);
+            $table->integer('prix_pain_client')->nullable(false)->default(150);
+            $table->foreignIdFor(Company::class)->constrained()->cascadeOnDelete();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('boulangeries');
+    }
+};
+
+
+2024_07_09_122748_create_livreurs_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateLivreursTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up(): void
+    {
+        Schema::create('livreurs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->string('prenom');
+            $table->string('nom');
+            $table->string('telephone');
+            $table->integer('prix_pain')->default(140);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('livreurs');
+    }
+}
+
+
+2024_07_09_140142__production_pantier_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up(): void
+    {
+        Schema::create('production_panetiers', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->date('date_production');
+            $table->integer('nombre_pain');
+            $table->integer('nombre_plat');
+            $table->integer('nombre_sac');
+            $table->integer('ration')->default(0);
+            $table->integer('donation')->default(0);
+            $table->integer('casse')->default(0);
+            $table->integer('mange')->default(0);
+            $table->integer('prix_pain_client')->default(120);
+            $table->enum('periode', ['matin', 'soir']);
+            $table->unique(['boulangerie_id','date_production', 'periode'], 'unique_production_panetier');
+            $table->integer('prix_pain_livreur')->default(150);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('production_panetier');
+    }
+};
+
+
+
+2024_07_09_143202_create_ouvriers_table.php
+<?php
+
+use App\Models\CategorieOuvrier;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('ouvriers', function (Blueprint $table) {
+            $table->id();
+            $table->string('prenom');
+            $table->string('nom');
+            $table->string('telephone');
+            $table->foreignIdFor(CategorieOuvrier::class);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('ouvriers');
+    }
+};
+
+
+2024_07_09_143418_create_caisses_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('caisses', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom');
+            $table->foreignIdFor(Boulangerie::class);
+            $table->unique(['nom', 'boulangerie_id']);
+            $table->integer('solde')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('caisses');
+    }
+};
+
+
+2024_07_09_144335_create_categories_ouvrier_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('categories_ouvrier', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->unique();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('categories_ouvrier');
+    }
+};
+
+
+2024_07_09_144748_create_clients_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateClientsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up(): void
+    {
+        Schema::create('clients', function (Blueprint $table) {
+            $table->id();
+            $table->string('prenom');
+            $table->string('nom');
+            $table->string('telephone');
+            $table->timestamps();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('clients');
+    }
+}
+
+
+2024_07_09_153201_create_type_depenses_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('type_depenses', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->nullable(false)->unique();
+            $table->foreignIdFor(Boulangerie::class);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('type_depenses');
+    }
+};
+
+
+2024_07_09_153202_create_depenses_table.php
+<?php
+
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\TypeDepense;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('depenses', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(TypeDepense::class)->nullable()->constrained()->nullOnDelete();
+            $table->foreignIdFor(Boulangerie::class)->nullable(false)->constrained()->cascadeOnDelete();
+            $table->foreignIdFor(Caisse::class)->nullable(false)->constrained()->cascadeOnDelete();
+            $table->integer('montant')->nullable(false);
+            $table->string('commentaire')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('depenses');
+    }
+};
+
+
+2024_07_09_164404_create_intrants_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('intrants', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->nullable(false);
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->unique(['nom',"boulangerie_id"]);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('intrants');
+    }
+};
+
+
+2024_07_09_164404_create_stock_intrants_table.php
+<?php
+
+use App\Models\Boulangerie;
+use App\Models\Intrant;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('stock_intrants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Intrant::class)->constrained()->cascadeOnDelete();
+            $table->string('nom')->nullable(false)->unique(); // add this line
+            $table->foreignIdFor(Boulangerie::class);
+            $table->integer('code_bar')->nullable();
+            $table->integer('quantite')->default(0);
+            $table->integer('prix_achat')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('stock_intrants');
+    }
+};
+
+
+2024_07_09_164404_mouve_intrants_table.php
+<?php
+
+use App\Models\Boulangerie;
+use App\Models\Intrant;
+use App\Models\StockIntrant;
+use App\Models\User;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('mouve_intrants', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(StockIntrant::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();;
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->integer('quantite')->default(0);
+            $table->integer('stock_avant');
+            $table->integer('stock_apres');
+            $table->enum('type', ['in', 'out']);
+            $table->json('metadata')->nullable();
+            $table->foreignIdFor(User::class)->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('stock_intrants');
+    }
+};
+
+
+2024_07_09_172555_create_production_petrisseurs_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('production_petrisseurs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Boulangerie::class);
+            $table->date('date_production')->nullable(false)
+                ->unique()
+                ->default(today()->toDateString());
+            $table->integer('nombre_sac');
+            $table->integer('nombre_chariot')->default(0);
+            $table->integer('nombre_plat')->default(0);
+            $table->integer('nombre_pain')->default(0);
+            $table->integer('rendement')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('production_petrisseurs');
+    }
+};
+
+
+2024_07_12_113724_create_chariots_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('chariots', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->unique();
+            $table->integer('nombre_pain')->default(0);
+            $table->foreignIdFor(Boulangerie::class);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('chariots');
+    }
+};
+
+
+2024_07_12_115252_create_chariot_prod_panetiers_table.php
+<?php
+
+use App\Models\Chariot;
+use App\Models\ProductionPanetier;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('chariot_prod_panetiers', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(ProductionPanetier::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->integer('nombre')->nullable(false);
+            $table->foreignIdFor(Chariot::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('chariot_prod_panetiers');
+    }
+};
+
+
+2024_07_12_115319_create_chariot_prod_petrisseurs_table.php
+<?php
+
+use App\Models\Chariot;
+use App\Models\ProductionPanetier;
+use App\Models\ProductionPetrisseur;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('chariot_prod_petrisseurs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(ProductionPetrisseur::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->foreignIdFor(Chariot::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('chariot_prod_petrisseurs');
+    }
+};
+
+
+2024_07_16_113034_create_boutiques_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('boutiques', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->nullable(false);
+            $table->foreignIdFor(Boulangerie::class);
+            $table->unique(['nom', 'boulangerie_id']);
+            $table->string('solde_pain')->nullable();
+            $table->string('adresse')->nullable();
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('boutiques');
+    }
+};
+
+
+2024_07_16_113852_create_abonnements_table.php
+<?php
+
+use App\Models\Client;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('abonnements', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Client::class)->nullable(false)->constrained()->cascadeOnDelete()
+                ->cascadeOnUpdate();
+            $table->dateTime('date_debut')->nullable(false)->default(today()->toDateTimeString());
+            $table->dateTime('date_fin')->nullable(false)->default(today()->addMonth()->toDateTimeString());
+            $table->integer('solde_pain')->default(0);
+            $table->integer('dette')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('abonnements');
+    }
+};
+
+
+2024_07_16_115127_create_compte_livreurs_table.php
+<?php
+
+use App\Models\Livreur;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('compte_livreurs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Livreur::class);
+            $table->integer('solde_pain')->default(0);
+            $table->integer('dette')->default(0);
+            $table->integer('solde_reliquat')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('compte_livreurs');
+    }
+};
+
+
+2024_07_16_115425_create_compte_clients_table.php
+<?php
+
+use App\Models\Client;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('compte_clients', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Client::class);
+            $table->integer('solde_pain')->default(0);
+            $table->integer('dette')->default(0);
+            $table->integer('solde_reliquat')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('compte_clients');
+    }
+};
+
+
+2024_07_18_233446_create_caisse_transactions_table.php
+<?php
+
+use App\Models\Caisse;
+use App\Models\User;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('caisse_transactions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Caisse::class)->constrained()->cascadeOnUpdate()->cascadeOnDelete();
+            $table->enum('type', ['cashin', 'cashout']);
+            $table->integer('montant')->nullable(false);
+            $table->string('commentaire')->nullable();
+            $table->foreignIdFor(User::class)->nullable()->constrained()->cascadeOnUpdate()->cascadeOnDelete();
+            $table->integer('solde_avant')->nullable(false);
+            $table->integer('solde_apres')->nullable(false);
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('caisse_transactions');
+    }
+};
+
+
+2024_07_19_122753_create_versements_table.php
+<?php
+/** @noinspection PhpUnused */
+
+use App\Models\Abonnement;
+use App\Models\Boulangerie;
+use App\Models\Boutique;
+use App\Models\Caisse;
+use App\Models\Client;
+use App\Models\Livreur;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class  extends Migration {
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up(): void
+    {
+        Schema::create('versements', function (Blueprint $table) {
+            $table->id();
+            $table->integer('nombre_pain_matin')->default(0);
+            $table->integer('nombre_pain_soir')->default(0);
+            $table->integer('nombre_retour')->default(0);
+            $table->integer('montant_verse')->default(0);
+            $table->foreignIdFor(model: Livreur::class)->nullable()->constrained()->onDelete('set null')->cascadeOnUpdate();
+            $table->foreignIdFor(model: Client::class)->nullable()->constrained()->onDelete('set null')->cascadeOnUpdate();
+            $table->foreignIdFor(model: Boutique::class)->nullable()->constrained()->onDelete('set null')
+                ->cascadeOnUpdate();
+            $table->foreignIdFor(model: Abonnement::class)->nullable()->constrained()->onDelete('set null')
+                ->cascadeOnUpdate();
+            $table->date('date_versement')->nullable(false);
+            $table->integer('prix_unit')->default(0);
+            $table->json('compte_data')->nullable();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->foreignIdFor(Caisse::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cahier_livreurs');
+    }
+};
+
+
+2024_07_19_153221_create_distrib_panetier_table.php
+<?php
+
+use App\Models\Abonnement;
+use App\Models\Boutique;
+use App\Models\Client;
+use App\Models\Livreur;
+use App\Models\ProductionPanetier;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateDistribPanetierTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up(): void
+    {
+        Schema::create('distrib_panetiers', function (Blueprint $table) {
+            $table->id();
+            $table->integer('nombre_pain');
+            $table->integer('bonus')->nullable();
+            $table->foreignIdFor(Livreur::class)->nullable()->constrained()->onDelete('set null');
+            $table->foreignIdFor(Client::class)->nullable()->constrained()->onDelete('set null');
+            $table->foreignIdFor(Boutique::class)->nullable()->constrained()->onDelete('set null');
+            $table->foreignIdFor(Abonnement::class)->nullable()->constrained()->onDelete('set null');
+            $table->timestamps();
+            $table
+                ->foreignIdFor(ProductionPanetier::class)
+                ->nullable(false)
+                ->constrained()
+                ->onDelete('cascade');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('distrib_panetier');
+    }
+}
+
+
+2024_07_19_212040_create_type_recettes_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('type_recettes', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->nullable(false);
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
+            $table->unique(['nom', 'boulangerie_id']);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('type_recettes');
+    }
+};
+
+
+2024_07_19_212042_create_recettes_table.php
+<?php
+
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\TypeRecette;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('recettes', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
+            $table->integer('montant')->nullable(false);
+            $table->foreignIdFor(Caisse::class)->constrained()->cascadeOnDelete();
+            $table->text('commentaire')->nullable();
+            $table->foreignIdFor(TypeRecette::class)->nullable()->constrained()->onDelete('set null');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('recettes');
+    }
+};
+
+
+2024_07_25_154146_create_articles_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('articles', function (Blueprint $table) {
+            $table->id();
+            $table->string('nom')->nullable(false);
+            $table->integer('prix');
+            $table->foreignIdFor(\App\Models\Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->unique(['nom', 'boulangerie_id']);
+            $table->softDeletes();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('articles');
+    }
+};
+
+
+2024_07_25_162304_create_prod_patisseries_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('prod_patisseries', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('prod_patisseries');
+    }
+};
+
+
+2024_07_25_162328_create_article_prod_patisseries_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('article_prod_patisseries', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('article_prod_patisseries');
+    }
+};
+
+
+
+Here are my Routes:
+api.php
+<?php
+
+use App\Http\Controllers\ClientController;
+use App\Http\Controllers\DepenseController;
+use App\Http\Controllers\DistribPanetierController;
+use App\Http\Controllers\LivreurController;
+use App\Http\Controllers\PanetierController;
+use App\Http\Controllers\PetrisseurController;
+use App\Http\Controllers\IntrantController;
+use App\Http\Controllers\RecetteController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\VersementController;
+use App\Models\Chariot;
+use App\Models\Depense;
+use App\Models\TypeDepense;
+use App\Models\TypeRecette;
+use Illuminate\Support\Facades\Route;
+Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
+Route::resource('petrisseurs', PetrisseurController::class);
+Route::get('panetiers/date/{date}', [PanetierController::class, 'productionDuJour']);
+Route::resource('panetiers', PanetierController::class)
+
+    ->parameters([
+        'panetiers' => 'productionPanetier',
+        // customise the store route
+    ]);
+Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
+Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
+Route::resource('distribution_panetiers', DistribPanetierController::class,[
+    'only' => ['index','update','destroy','show']
+])->parameters([
+    'distribution_panetiers' => 'distribPanetier',
+    // customise the store route
+]);
+Route::get('versements/livreurs', [VersementController::class, 'versementsLivreurs'])->name('versements.livreurs');
+// versements d'une date
+Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
+Route::put('livreurs/{livreur}/activate/{is_active}', [LivreurController::class, 'disable'])->name('livreurs.activate');
+Route::resource('livreurs', LivreurController::class);
+Route::resource('versements', VersementController::class);
+Route::get('depenses/date/{date}', [DepenseController::class, 'depensesDate'])->name('depenses.date');
+Route::resource('depenses', DepenseController::class);
+Route::resource('intrants', IntrantController::class);
+Route::post('stocks/entree',[StockController::class,'entreeStock']);
+Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
+Route::get('stocks/movements/{intrant}', [StockController::class, 'getMovements']);
+Route::put('clients/{client}/toggle', [ClientController::class, 'toggle']);
+
+Route::resource('clients', ClientController::class);
+
+Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
+Route::resource('recettes', RecetteController::class);
+Route::get('chariots',function (){
+    return response()->json(Chariot::all()->map(function (Chariot $chariot){
+        return [
+            'id' => $chariot->id,
+            'nom' => $chariot->nom,
+            "nombre" => $chariot->nombre_pain,
+        ];
+    }));
+
+});
+Route::get('types_depenses_recettes',function (){
+    return response()->json([
+        'type_depenses' => TypeDepense::all()->map(function (TypeDepense $depense){
+            return [
+                'id' => $depense->id,
+                'nom' => $depense->nom,
+            ];
+        }),
+        'type_recettes' => TypeRecette::all()->map(function (TypeRecette $recette){
+            return [
+                'id' => $recette->id,
+                'nom' => $recette->nom,
+            ];
+        }),
+    ]);
+});
+
+
+
+
+
+console.php
+<?php
+
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Support\Facades\Artisan;
+
+Artisan::command('inspire', function () {
+    $this->comment(Inspiring::quote());
+})->purpose('Display an inspiring quote')->hourly();
+
+
+web.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+
+
+Here are my Json Resources:
+DistribPanetierResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\DistribPanetier;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class DistribPanetierResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        /** @var $this DistribPanetier */
+        $data = [
+            "id" => $this->id,
+            "nombre_pain" => $this->nombre_pain,
+
+        ];
+        if ($this->isForLivreur()) {
+            $data["livreur"] = $this->livreur->identifier();
+        }
+        if ($this->isForClient()) {
+            $data["client"] = $this->client->identifier();
+        }
+        if ($this->isForBoutique()) {
+            $data["boutique"] = $this->boutique->nom;
+        }
+        if ($this->isForAbonnement()) {
+            $data["abonnement"] = $this->abonnement->identifier();
+        }
+
+        return  $data;
+    }
+}
+
+
+OperationCaisseResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\Depense;
+use App\Models\Recette;
+use App\Models\Versement;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
+
+class OperationCaisseResource extends  JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        $definition = [
+            'id' => $this->id,
+            'montant' => $this->montant,
+            'created_at' => $this->created_at,
+            'commentaire' => $this->commentaire
+        ];
+        if (isset($this->typeRecette)) {
+            $definition['identifier'] = $this->identifier();
+            $definition['type_recette_nom'] = $this->typeRecette->nom;
+            $definition['type_recette_id'] = $this->typeRecette->id;
+        }
+        else if (isset($this->typeDepense)) {
+            $definition['depense'] = $this->typeDepense->nom;
+            $definition['type_depense_nom'] = $this->typeDepense->nom;
+            $definition['type_depense_id'] = $this->typeDepense->id;
+        }else{
+            // throw exception
+            throw new \Exception("OperationCaisseResource: OperationCaisseResource must be either Recette or Depense");
+
+        }
+
+        return $definition;
+    }
+}
+
+ProdPanetierResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\ChariotProdPanetier;
+use App\Models\ProductionPanetier;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ProdPanetierResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        /** @var $this ProductionPanetier */
+        $definition = [
+            "id" => $this->id,
+            "nombre_petrisseur" => $this->getCorrespondingProdPetrisseur() !== null ?
+                $this->getCorrespondingProdPetrisseur()->total_pain : 0,
+            "date_production" => $this->date_production,
+            "identifier" => $this->identifier(),
+            "nombre_pain" => $this->nombre_pain,
+            "nombre_plat" => $this->nombre_plat,
+            "nombre_sac" => $this->nombre_sac,
+            "ration" => $this->ration,
+            "donation" => $this->donation,
+            "casse" => $this->casse,
+            "total_pain_petrisseur_produit" => $this->total_pain_petrisseur_produit,
+            "nombre_pain_entregistre" => $this->nombre_pain_entregistre,
+            "total_pain_distribue" => $this->total_pain_distribue,
+
+            "chariots" => $this->chariots->map(function (ChariotProdPanetier $chariotProdPanetier) {
+                return [
+                    "nom" => $chariotProdPanetier->chariot->identifier(),
+                    "nombre" => $chariotProdPanetier->nombre,
+                    "nombre_pain"=> $chariotProdPanetier->chariot->nombre_pain
+                ];
+            }),
+            "mange" => $this->mange,
+        ];
+        $definition['resultat'] = $definition['nombre_petrisseur'] - $definition['nombre_pain_entregistre'];
+        return $definition;
+    }
+}
+
+
+VersementResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\Versement;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
+
+class VersementResource extends  JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        /** @var $this Versement */
+        $data = [
+            'id' => $this->id,
+            "montant_verse" => $this->montant_verse,
+            "nombre_retour" => $this->nombre_retour,
+            'created_at' => Carbon::parse($this->created_at)->format('Y-m-d H:i:s'),
+
+        ];
+        if ($this->isForLivreur()){
+            $data['livreur'] = $this->livreur->identifier();
+        }
+        if ($this->isForClient()){
+            $data['client'] = $this->client->identifier();
+        }
+        if ($this->isForBoutique()){
+            $data['boutique'] = $this->boutique->identifier();
+        }
+        if ($this->isForAbonnement()){
+            $data['abonnement'] = $this->abonnement->identifier();
+        }
+        $data['caisse'] = $this->caisse->identifier();
+        return $data;
+    }
+
+
+}
+
+
+Here are my Rules:
+UniqueProductionPeriode.php
+<?php
+
+namespace App\Rules;
+
+use Carbon\Carbon;
+use Closure;
+use Illuminate\Contracts\Validation\ValidationRule;
+use App\Models\ProductionPanetier;
+
+class UniqueProductionPeriode implements ValidationRule
+{
+    private ?string $date_production;
+    private ?string $periode;
+    private ?int $excludeId;
+
+    public function __construct($date_production, $periode, $excludeId = null)
+    {
+        $this->date_production = $date_production;
+        $this->periode = $periode;
+        $this->excludeId = $excludeId;
+    }
+
+
+
+    public function message(): string
+    {
+        return 'On a déjà crée un cahier pantier pour '.$this->periode.' pour la date  '.$this->date_production;
+    }
+
+    /**
+     * @param string $attribute
+     * @param mixed $value
+     * @param Closure $fail
+     * @return void
+     */
+    public function validate(string $attribute, mixed $value, Closure $fail): void
+    {
+
+        $query = ProductionPanetier::where('date_production', $this->date_production)
+            ->where('periode', $this->periode);
+
+        if ($this->excludeId) {
+            $query->where('id', '!=', $this->excludeId);
+        }
+         if($query->exists()){
+            $fail($this->message());
+         };
+    }
+}
+
+
+
+Here are my Controllers:
+AbonnementController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class AbonnementController extends Controller
+{
+    //
+}
+
+
+ArticleController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Article;
+use App\Models\Boulangerie;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class ArticleController extends Controller
+{
+    /**
+     * Display a listing of the articles.
+     *
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $articles = Article::where('boulangerie_id', Boulangerie::requireBoulangerieOfLoggedInUser()->id)->get();
+        return response()->json($articles);
+    }
+
+    /**
+     * Store a newly created article in storage.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $validatedData = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prix' => 'required|integer',
+        ]);
+
+        $article = new Article($validatedData);
+        $article->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        $article->save();
+
+        return response()->json($article, 201);
+    }
+
+    /**
+     * Display the specified article.
+     *
+     * @param Article $article
+     * @return JsonResponse
+     */
+    public function show(Article $article)
+    {
+        return response()->json($article);
+    }
+
+    /**
+     * Update the specified article in storage.
+     *
+     * @param Request $request
+     * @param Article $article
+     * @return JsonResponse
+     */
+    public function update(Request $request, Article $article)
+    {
+        $validatedData = $request->validate([
+            'nom' => 'string|max:255',
+            'prix' => 'integer',
+        ]);
+
+        $article->update($validatedData);
+
+        return response()->json($article);
+    }
+
+    /**
+     * Remove the specified article from storage.
+     *
+     * @param Article $article
+     * @return JsonResponse
+     */
+    public function destroy(Article $article)
+    {
+        $article->delete();
+
+        return response()->json(null, 204);
+    }
+}
+
+
+BoutiqueController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class BoutiqueController extends Controller
+{
+    //
+}
+
+
+ChariotController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class ChariotController extends Controller
+{
+    //
+}
+
+
+ClientController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Boulangerie;
+use App\Models\Client;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class ClientController extends Controller
+{
+    /**
+     * Display a listing of clients.
+     *
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $clients = Client::all();
+        return response()->json($clients);
+    }
+
+    /**
+     * Store a newly created client in storage.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'telephone' => 'required|string|max:255',
+        ]);
+
+
+        $client = new Client($data);
+        $client->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
+        $client->save();
+
+        return response()->json($client, 201);
+    }
+
+    /**
+     * Display the specified client.
+     *
+     * @param Client $client
+     * @return JsonResponse
+     */
+    public function show(Client $client)
+    {
+        return response()->json($client);
+    }
+
+    /**
+     * Update the specified client in storage.
+     *
+     * @param Request $request
+     * @param Client $client
+     * @return JsonResponse
+     */
+    public function update(Request $request, Client $client)
+    {
+        $data = $request->validate([
+            'nom' => 'sometimes|required|string|max:255',
+            'prenom' => 'sometimes|required|string|max:255',
+            'telephone' => 'sometimes|required|string|max:255',
+        ]);
+
+        $client->update($data);
+
+        return response()->json($client);
+    }
+
+    /**
+     * Remove the specified client from storage.
+     *
+     * @param Client $client
+     * @return JsonResponse
+     */
+    public function destroy(Client $client)
+    {
+        $client->delete();
+
+        return response()->json(null, 204);
+    }
+
+    /**
+     * Toggle the active status of the specified client.
+     *
+     * @param Client $client
+     * @return JsonResponse
+     */
+    public function toggle(Client $client)
+    {
+        $client->is_active = !$client->is_active;
+        $client->save();
+
+        return response()->json($client);
+    }
+}
+
+
+CompteLivreurController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class CompteLivreurController extends Controller
+{
+    //
+}
+
+
+Controller.php
+<?php
+
+namespace App\Http\Controllers;
+
+abstract class Controller
+{
+    //
+}
+
+
+DepenseController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Resources\OperationCaisseResource;
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\Depense;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class DepenseController extends Controller
+{
+    /**
+     * Display a listing of dépenses.
+     *
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $depenses = Depense::whereHas("caisse",function (Builder $query){
+            $query->where("boulangerie_id", Boulangerie::requireBoulangerieOfLoggedInUser()->id);
+        })->get();
+        return response()->json(OperationCaisseResource::collection($depenses));
+    }
+
+    public function depensesDate($date)
+    {
+        $depenses =  Depense::whereHas("caisse",function (Builder $query){
+            $query->where("boulangerie_id", Boulangerie::requireBoulangerieOfLoggedInUser()->id);
+        })->whereDate('created_at',$date)
+            ->orderByDesc('created_at')->get();
+        return response()->json(OperationCaisseResource::collection($depenses));
+
+    }
+
+    /**
+     * Store a newly created dépense in storage.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $validatedData = $request->validate([
+            'type_depense_id' => 'required|integer|exists:type_depenses,id',
+            'montant' => 'required|numeric',
+            "commentaire"=>"nullable|string",
+            // Add other fields as necessary
+        ]);
+
+        $depense = new Depense($validatedData);
+        DB::transaction(function () use ($depense) {
+            $depense->caisse()->associate(Caisse::requireCaisseOfLoggedInUser());
+            $depense->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
+            $depense->save();
+            $caisse = $depense->caisse;
+            $caisse->diminuerSolde($depense->montant);
+            $caisse->save();
+        });
+
+        return response()->json($depense, 201);
+    }
+
+    /**
+     * Display the specified dépense.
+     *
+     * @param Depense $depense
+     * @return JsonResponse
+     */
+    public function show(Depense $depense)
+    {
+        return response()->json($depense);
+    }
+
+    /**
+     * Update the specified dépense in storage.
+     *
+     * @param Request $request
+     * @param Depense $depense
+     * @return JsonResponse
+     */
+    public function update(Request $request, Depense $depense)
+    {
+        DB::transaction(function () use ($depense,$request) {
+            $previousAmount = $depense->montant;
+            $validatedData = $request->validate([
+                'montant' => 'numeric',
+                'type_depense_id' => 'integer|exists:type_depenses,id',
+                "commentaire"=>"nullable|string",
+            ]);
+            $depense->update($validatedData);
+            $caisse = $depense->caisse;
+            $shouldIncreaseSoldeCaisse = $validatedData['montant'] > $previousAmount;
+            $shouldDecreaseSoldeCaisse = $validatedData['montant'] < $previousAmount;
+            if ($shouldIncreaseSoldeCaisse){
+                $caisse->augmenterSolde($validatedData['montant'] - $previousAmount);
+            }else if ($shouldDecreaseSoldeCaisse){
+                $caisse->diminuerSolde($previousAmount - $validatedData['montant']);
+            }
+            $caisse->save();
+        });
+
+        return response()->json($depense);
+    }
+
+    /**
+     * Remove the specified dépense from storage.
+     *
+     * @param Depense $depense
+     * @return JsonResponse
+     */
+    public function destroy(Depense $depense)
+    {
+        DB::transaction(function () use ($depense) {
+            $caisse = $depense->caisse;
+            $caisse->diminuerSolde($depense->montant);
+            $depense->delete();
+        });
+
+
+        return response()->json(null, 204);
+    }
+
+
+}
+
+DistribPanetierController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Abonnement;
+use App\Models\Boulangerie;
+use App\Models\Boutique;
+use App\Models\Client;
+use App\Models\DistribPanetier;
+use App\Models\Livreur;
+use App\Models\ProductionPanetier;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class DistribPanetierController extends Controller
+{
+    public function store(ProductionPanetier $productionPanetier, Request $request)
+    {
+        $data = $request->validate([
+            'nombre_pain' => 'required|integer',
+            'livreur_id' => 'nullable|integer|exists:livreurs,id',
+            'client_id' => 'nullable|integer|exists:clients,id',
+            'abonnement_id'=> 'nullable|integer|exists:abonnements,id',
+            "boutique_id" => "nullable|integer|exists:boutiques,id",
+            "paye"=> "boolean",
+            'production_panetier_id' => 'integer|exists:production_panetiers,id',]);
+        $productionPanetier->nombre_pain = $productionPanetier->nombre_pain_entregistre;
+        if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
+            return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain produit"], 422);
+        }
+        else if ($data['nombre_pain'] < 0) {
+            return response()->json(["message" => "Le nombre de pain distribué ne peut pas être négatif"], 422);
+        }
+        else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain -
+                $productionPanetier->total_pain_distribue)) {
+            return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain restant"], 422);
+        }
+        $distribPanetier = new DistribPanetier($data);
+        // start transaction before saving operations
+        DB::transaction(function () use ($productionPanetier, $distribPanetier) {
+            $productionPanetier->distribPanetiers()->save($distribPanetier);
+            // if it's a client, we need to update the client's account
+            if ($distribPanetier->isForClient()) {
+                $client = Client::find($distribPanetier->client_id);
+                $compte_client = $client->compteClient;
+                $compte_client->solde_pain += $distribPanetier->nombre_pain;
+                $compte_client->dette = $compte_client->dette + ($distribPanetier->nombre_pain *
+                        $productionPanetier->prix_pain_client);
+
+                $compte_client->save();
+            }
+            // if it's a livreur, we need to update the livreur  account
+            if ($distribPanetier->isForLivreur()) {
+                $livreur = Livreur::find($distribPanetier->livreur_id);
+                $compte_livreur = $livreur->compteLivreur;
+                $compte_livreur->solde_pain += $distribPanetier->nombre_pain;
+                $compte_livreur->dette = $compte_livreur->dette + ($distribPanetier->nombre_pain *
+                        $productionPanetier->prix_pain_livreur);
+                $compte_livreur->save();
+            }
+            // if it's a boutique, we need to update the boutique's account
+            if ($distribPanetier->isForBoutique()) {
+                $boutique = Boutique::find($distribPanetier->boutique_id);
+                $boutique->solde_pain += $distribPanetier->nombre_pain;
+                $boutique->save();
+            }
+            // if it's an abonnement, we need to update the abonnement account
+            if ($distribPanetier->isForAbonnement()) {
+                $abonnement = Abonnement::find($distribPanetier->abonnement_id);
+                $abonnement->solde_pain += $distribPanetier->nombre_pain;
+                $abonnement->dette = $abonnement->dette + ($distribPanetier->nombre_pain *
+                        $productionPanetier->prix_pain_client);
+                $abonnement->save();
+            }
+
+        });
+
+
+
+        return response()->json($distribPanetier, 201);
+
+    }
+
+    public function update(DistribPanetier $distribPanetier, Request $request)
+    {
+        $data = $request->validate([
+            'nombre_pain' => 'integer',
+            'livreur_id' => 'nullable|integer|exists:livreurs,id',
+            'client_id' => 'nullable|integer|exists:clients,id',
+            'abonnement_id'=> 'nullable|integer|exists:abonnements,id',
+            "boutique_id" => "nullable|integer|exists:boutiques,id",
+            'production_panetier_id' => 'integer|exists:production_panetiers,id',]);
+
+
+
+        // after update, we take the difference and update solde pain if livreur or client, or boutique or abonnement
+        $productionPanetier = ProductionPanetier::find($distribPanetier->production_panetier_id);
+
+        $shouldIncreaseLivreurCompte = $data['nombre_pain'] > $distribPanetier->nombre_pain  ;
+        $nombreToIncrease = $shouldIncreaseLivreurCompte ? $data['nombre_pain'] - $distribPanetier->nombre_pain : 0;
+        $shouldDecreaseLivreurCompte = $data['nombre_pain'] < $distribPanetier->nombre_pain;
+        $nombreToDecrease = $shouldDecreaseLivreurCompte ? $distribPanetier->nombre_pain - $data['nombre_pain'] : 0;
+       $diff = $nombreToIncrease - $nombreToDecrease;
+        $distribPanetier->update($data);
+        if ($distribPanetier->isForClient()) {
+            $client = Client::find($distribPanetier->client_id);
+            $compte_client = $client->compteClient;
+            $compte_client->solde_pain += $diff;
+            $compte_client->dette = $compte_client->dette + ($diff *
+                    $productionPanetier->prix_pain_client);
+            $compte_client->save();
+        }
+        if ($distribPanetier->isForLivreur()) {
+
+            $livreur = Livreur::find($distribPanetier->livreur_id);
+            $compte_livreur = $livreur->compteLivreur;
+            if ($shouldIncreaseLivreurCompte) {
+                $compte_livreur->augmenterSoldePain($nombreToIncrease);
+                $compte_livreur->dette = $compte_livreur->dette + ($nombreToIncrease *
+                        $productionPanetier->prix_pain_livreur);
+            } else if ($shouldDecreaseLivreurCompte) {
+                $compte_livreur->diminuerSoldePain($nombreToDecrease);
+                $compte_livreur->dette = $compte_livreur->dette - ($nombreToDecrease *
+                        $productionPanetier->prix_pain_livreur);
+            }
+            $compte_livreur->save();
+        }
+        if ($distribPanetier->isForBoutique()) {
+            $boutique = Boutique::find($distribPanetier->boutique_id);
+            $boutique->solde_pain += $diff;
+            $boutique->save();
+        }
+        if ($distribPanetier->isForAbonnement()) {
+            $abonnement = Abonnement::find($distribPanetier->abonnement_id);
+            $abonnement->solde_pain += $diff;
+            $abonnement->dette = $abonnement->dette + ($diff *
+                    $productionPanetier->prix_pain_client);
+            $abonnement->save();
+        }
+        return response()->json($distribPanetier);
+    }
+
+    public function destroy(DistribPanetier $distribPanetier)
+    {
+        $distribPanetier->delete();
+        return response()->json(null, 204);
+    }
+
+    // show distrib panetier
+    public function show(DistribPanetier $distribPanetier)
+    {
+        return response()->json($distribPanetier);
+    }
+
+    public function getEntitiesForDistrib(Request $request)
+    {
+        $boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+
+        $clients = Client::whereBoulangerieId($boulangerie_id)->get()->map(function (Client $client){
+            return [
+                'id' => $client->id,
+                'nom' => $client->identifier()
+            ];
+        });
+        $livreurs = Livreur::whereBoulangerieId($boulangerie_id)->whereIsActive(true)
+            ->get()->map(function (Livreur $livreur){
+                return [
+                    'id' => $livreur->id,
+                    'nom' => $livreur->identifier(),
+                ];
+            })
+        ;
+        $abonnements = Abonnement::whereHas("client",function ($query) use ($boulangerie_id){
+            $query->where("boulangerie_id",$boulangerie_id);
+
+        })->get()->map(function (Abonnement $abonnement){
+            return [
+                'id' => $abonnement->id,
+                'nom' => $abonnement->identifier(),
+            ];
+        });
+        $boutiques = Boutique::whereBoulangerieId($boulangerie_id)->orderBy('id')
+            ->get(['id', 'nom']);
+
+        return response()->json([
+            'clients' => $clients,
+            'livreurs' => $livreurs,
+            'abonnements' => $abonnements,
+            'boutiques' => $boutiques,
+        ]);
+    }
+
+
+}
+
+
+IntrantController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Boulangerie;
+use App\Models\Intrant;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class IntrantController extends Controller
+{
+    /**
+     * Display a listing of the intrants.
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $stocks = Intrant::whereBoulangerieId(Boulangerie::requireBoulangerieOfLoggedInUser()->id)->get();
+        return response()->json($stocks->map(function (Intrant $intrant) {
+            return [
+                "id" => $intrant->id,
+                "nom" => $intrant->nom,
+                "stock" => $intrant->stock()->sum("quantite"),
+            ];
+        }));
+    }
+
+    /**
+     * Store a newly created stock in storage.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $validatedData = $request->validate([
+            'nom' => 'required|string|max:255|unique:intrants,nom',
+            // Add other fields as necessary
+        ]);
+
+
+        $intrant = new Intrant($validatedData);
+        $intrant->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
+        $intrant->save();
+        // create stock
+        $intrant->stock()->create([
+            "quantite" => 0,
+            "nom" => "Stock de ".$intrant->nom,
+            "code_bar" => now()->timestamp, // generate a unique code bar (timestamp
+            "prix_achat" => 0,
+            "boulangerie_id" => $intrant->boulangerie_id
+        ]);
+        return response()->json($intrant, 201);
+    }
+
+    /**
+     * Display the specified stock.
+     *
+     * @param Intrant $intrant
+     * @return JsonResponse
+     */
+    public function show(Intrant $intrant)
+    {
+        return response()->json($intrant);
+    }
+
+    /**
+     * Update the specified stock in storage.
+     *
+     * @param Request $request
+     * @param Intrant $intrant
+     * @return JsonResponse
+     */
+    public function update(Request $request,Intrant $intrant)
+    {
+        $validatedData = $request->validate([
+            'nom' => 'string|max:255|unique:intrants,nom,'.$intrant->id,
+        ]);
+
+        $intrant->update($validatedData);
+        return response()->json($intrant);
+    }
+
+    /**
+     * Remove the specified stock from storage.
+     *
+     * @param Intrant $intrant
+     * @return JsonResponse
+     */
+    public function destroy(Intrant $intrant)
+    {
+        $intrant->delete();
+        return response()->json(null, 204);
+    }
+}
+
+LivreurController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Boulangerie;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use App\Models\Livreur;
+
+class LivreurController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $livreurs = Livreur::whereBoulangerieId(Boulangerie::requireBoulangerieOfLoggedInUser()->id)->whereIsActive
+        (true)->get();
+        return response()->json($livreurs);
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  Request  $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $validatedData = $request->validate([
+            'prenom' => 'required|string|max:255',
+            'nom' => 'required|string|max:255',
+            'telephone' => 'required|numeric|digits:9|unique:livreurs,telephone',
+            // Add other fields as necessary
+        ], [
+            'telephone.unique' => 'Le numéro de téléphone est déjà utilisé',
+        ]);
+
+        $livreur = new Livreur($validatedData);
+        $livreur->is_active = true;
+        $livreur->prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
+        $livreur->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
+        $livreur->save();
+        $livreur->compteLivreur()->create();
+        return response()->json($livreur, 201);
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  Request  $request
+     * @param  Livreur  $livreur
+     * @return JsonResponse
+     */
+    public function update(Request $request, Livreur $livreur)
+    {
+        $validatedData = $request->validate([
+            'prenom' => 'string|max:255',
+            'nom' => 'string|max:255',
+            'telephone' => 'string|digits:9|unique:livreurs,telephone,'.$livreur->id,
+            // Add other fields as necessary
+        ]);
+
+        $livreur->update($validatedData);
+        return response()->json($livreur);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  Livreur  $livreur
+     * @return JsonResponse
+     */
+    public function destroy(Livreur $livreur)
+    {
+        $livreur->delete();
+        return response()->json(null, 204);
+    }
+
+    /**
+     * Disable the specified resource.
+     *
+     * @param Livreur $livreur
+     * @param bool $is_active
+     * @return JsonResponse
+     */
+    public function disable(Livreur $livreur, bool $is_active = false)
+    {
+
+        $livreur->update(['is_active' => $is_active]);
+        return response()->json(['message' => 'Livreur disabled successfully']);
+    }
+}
+
+PanetierController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Resources\DistribPanetierResource;
+use App\Http\Resources\ProdPanetierResource;
+use App\Models\Boulangerie;
+use App\Models\ProductionPanetier;
+use App\Rules\UniqueProductionPeriode;
+use Illuminate\Http\Request;
+
+class PanetierController extends Controller
+{
+    //save production panetier
+    public function index()
+    {
+        $productions = ProductionPanetier::with('distribPanetiers')->whereBetween('date_production', [now()
+                ->startOfMonth()->toDateString(), now()
+            ->endOfMonth()->toDateString()])
+            ->orderByDesc('date_production')
+            ->get();
+        return response()->json($productions);
+    }
+
+    // get production pantier du jour
+    public function productionDuJour($date)
+    {
+        $productions = ProductionPanetier::with('distribPanetiers')->where('date_production', $date)->get();
+        return response()->json($productions);
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'date_production' => ['date_format:Y-m-d','required', new UniqueProductionPeriode($request->get('date_production'), $request->get('periode'))],
+            'nombre_pain' => 'required|integer',
+            'nombre_plat' => 'required|integer',
+            'nombre_sac' => 'required|integer',
+            'ration' => 'required|integer',
+            'donation' => 'required|integer',
+            'casse' => 'required|integer',
+            'chariots' => '|required|array',
+            'periode' => 'required|in:matin,soir',
+            'mange' => 'required|integer',
+        ]);
+        $productionPanetier = new ProductionPanetier($data);
+        $productionPanetier->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
+        $productionPanetier->save();
+        $productionPanetier->chariots()->createMany($request->chariots);
+        return response()->json($productionPanetier->load('chariots'), 201);
+    }
+
+
+    public function update(Request $request, ProductionPanetier $productionPanetier)
+    {
+        $data = $request->validate([
+            'date_production' => 'date',
+            'nombre_pain' => 'integer',
+            'nombre_plat' => 'integer',
+            'nombre_sac' => 'integer',
+            "nombre_chariot" => "integer",
+            'ration' => 'integer',
+            'donation' => 'integer',
+            'casse' => 'integer',
+            'mange' => 'integer',
+            'chariots' => 'array',
+        ]);
+        $productionPanetier->update($data);
+        return response()->json($productionPanetier);
+    }
+
+    public function destroy(ProductionPanetier $productionPanetier)
+    {
+        $productionPanetier->delete();
+        return response()->json(null, 204);
+    }
+
+    public function show(ProductionPanetier $productionPanetier)
+    {
+        $productionPanetier->load('chariots');
+
+        $livreurs = $productionPanetier->distribPanetiers()->whereNotNull('livreur_id')->get();
+        $clients = $productionPanetier->distribPanetiers()->whereNotNull('client_id')->get();
+        $abonnements = $productionPanetier->distribPanetiers()->whereNotNull('abonnement_id')->get();
+        $boutiques = $productionPanetier->distribPanetiers()->whereNotNull('boutique_id')->get();
+        return response()->json([
+            'productionPanetier' => new ProdPanetierResource($productionPanetier),
+            'livreurs' => DistribPanetierResource::collection($livreurs),
+            'clients' => DistribPanetierResource::collection($clients),
+            'abonnements' => DistribPanetierResource::collection($abonnements),
+            'boutiques' => DistribPanetierResource::collection($boutiques),
+
+        ]);
+
+    }
+
+
+
+}
+
+
+PetrisseurController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Boulangerie;
+use App\Models\Company;
+use App\Models\Intrant;
+use App\Models\ProductionPetrisseur;
+use Illuminate\Http\Request;
+
+class PetrisseurController extends Controller
+{
+    // enregistre production petrisseur
+    public function index()
+    {
+        $productions = ProductionPetrisseur::ofCurrentBoulangerie()->orderByDesc('date_production')->limit(30)->get();
+        return response()->json($productions);
+    }
+    public function productionDuJour($date)
+    {
+        $productions = ProductionPetrisseur::ofCurrentBoulangerie()
+            ->where('date_production', $date)->get();
+        return response()->json($productions);
+    }
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'date_production' => 'required|date|unique:production_petrisseurs|date_format:Y-m-d',
+            'nombre_chariot' => 'required|integer',
+            'nombre_sac'  => 'required|integer', // 'nombre_sac' => 'required|integer
+            'nombre_plat'  => 'required|integer',
+            'nombre_pain'  => 'required|integer',
+            "rendement" => 'integer',
+        ], [
+            'date_production.unique' => 'La production de cette date a déjà été enregistrée',
+        ]);
+        $production = new ProductionPetrisseur($data);
+
+        $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
+
+        $production->boulangerie()->associate($boulangerie);
+        $production->save();
+        // réduire stock de farine
+        $intrantFarine = Intrant::where('nom', 'LIKE','%farine%')
+            ->whereBoulangerieId($boulangerie->id)
+            ->first();
+        if ($intrantFarine != null) {
+            $stockFarine = $intrantFarine->stock;
+            $stockFarine->diminuerStock($production->nombre_sac);
+        }
+        return response()->json($production, 201);
+
+    }
+    public function show(ProductionPetrisseur $petrisseur)
+    {
+
+        return response()->json($petrisseur);
+    }
+    public function update(Request $request, ProductionPetrisseur $petrisseur)
+    {
+        $data = $request->validate([
+            'date_production' => 'date',
+            'nombre_chariot' => 'integer',
+            'nombre_sac'  => 'integer',
+            'nombre_plat'  => 'integer',
+            'rendement'  => 'integer',
+            'nombre_pain'  => 'integer',
+        ]);
+
+        $petrisseur->update($data);
+        return response()->json($petrisseur);
+    }
+    public function destroy(ProductionPetrisseur $petrisseur)
+    {
+        $petrisseur->delete();
+        return response()->json(null, 204);
+    }
+
+}
+
+
+ProdPatisserieController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class ProdPatisserieController extends Controller
+{
+    //
+}
+
+
+RecetteController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Resources\OperationCaisseResource;
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\Recette;
+use App\Models\TypeRecette;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class RecetteController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $recettes = Recette::with('typeRecette')->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)
+            ->orderByDesc('created_at')->get()
+            ->map
+        (function ($recette) {
+            return [
+                'id' => $recette->id,
+                'identifier' => $recette->identifier(),
+                "montant" => $recette->montant,
+                'commentaire'=>$recette->commentaire,
+                "created_at" => $recette->created_at,
+
+            ];
+        });
+        return response()->json($recettes);
+    }
+
+    public function recettesJour($date)
+    {
+        $recettes = Recette::with('typeRecette')
+            ->whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)
+            ->orderByDesc('created_at')->whereDate('created_at', $date)->get();
+        return response()->json(OperationCaisseResource::collection($recettes));
+
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'montant' => 'required|numeric|min:10',
+            'type_recette_id' => 'required|exists:type_recettes,id',
+            'commentaire' => 'nullable|string',
+            "caisse_id" => "exists:caisses,id",
+            // Add other fields as necessary
+        ]);
+        if (!isset($validated['caisse_id'])) {
+            $validated['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
+        }
+        $recette = new Recette($validated);
+        $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        DB::transaction(function () use ($recette) {
+            $recette->save();
+            // TODO: check the right caisse
+            $caisse = Caisse::requireCaisseOfLoggedInUser();
+            $caisse->augmenterSolde($recette->montant);
+        });
+        $recette->refresh();
+        return response()->json($recette, 201);
+    }
+    // update function
+    public function update(Recette $recette)
+    {
+        $validated = request()->validate([
+            'montant' => 'numeric|min:10',
+            'type_recette_id' => 'exists:type_recettes,id',
+            'commentaire' => 'nullable|string',
+            // Add other fields as necessary
+        ]);
+
+
+        // update caisse solde
+        DB::transaction(function () use ($validated,$recette) {
+            $diff = $validated['montant'] > $recette->montant ? $validated['montant'] - $recette->montant : $recette->montant - $validated['montant'];
+
+            $recette->update($validated);
+            $caisse = Caisse::requireCaisseOfLoggedInUser();
+            // calculate the difference between the old and new montant and update caisse accordingly
+            if ($validated['montant'] > $recette->montant) {
+                $caisse->augmenterSolde($diff);
+            } else {
+                $caisse->diminuerSolde($diff);
+            }
+            $recette->save();
+            $caisse->augmenterSolde($recette->montant);
+        });
+        return response()->json($recette);
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param Recette $recette
+     * @return JsonResponse
+     */
+    public function show(Recette $recette)
+    {
+//        $recette->load('typeRecette');
+        return response()->json([
+            'id' => $recette->id,
+            'montant' => $recette->montant,
+            'commentaire' => $recette->commentaire,
+            'created_at' => $recette->created_at,
+            'identifier' => $recette->identifier(),
+
+        ]);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param Recette $recette
+     * @return JsonResponse
+     */
+    public function destroy(Recette $recette)
+    {
+        DB::transaction(function () use ($recette) {
+            $recette->delete();
+            // TODO: check the right caisse
+            $caisse = Caisse::requireCaisseOfLoggedInUser();
+            $caisse->diminuerSolde($recette->montant);
+        });
+
+        return response()->json(null, 204);
+    }
+}
+   /* public function storeTypeRecette()
+    {
+        $validated = request()->validate([
+            'nom' => 'required|string|max:255',
+            // Add other fields as necessary
+        ]);
+
+        $typeRecette = TypeRecette::create($validated);
+        return response()->json($typeRecette, 201);
+
+    }
+    public function updateTypeRecette(TypeRecette $typeRecette)
+    {
+        $validated = request()->validate([
+            'nom' => 'required|string|max:255',
+            // Add other fields as necessary
+        ]);
+
+        $typeRecette->update($validated);
+        return response()->json($typeRecette);
+    }
+    public function destroyTypeRecette(TypeRecette $typeRecette)
+    {
+        $typeRecette->delete();
+        return response()->json(null, 204);
+    }
+    public function indexTypeRecette()
+    {
+        $typeRecettes = TypeRecette::all();
+        return response()->json($typeRecettes);
+    }
+    public function showTypeRecette(TypeRecette $typeRecette)
+    {
+        return response()->json($typeRecette);
+    }*/
+
+
+StockController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Boulangerie;
+use App\Models\Intrant;
+use App\Models\MouveIntrant;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class StockController extends Controller
+{
+    //store
+    public function entreeStock(Request $request)
+    {
+        $validatedData = $request->validate([
+            'intrants' => 'array|required',
+            'intrants.*.intrant_id' => 'required|integer|exists:intrants,id',
+            'intrants.*.quantite' => 'required|integer|min:1',
+            'intrants.*.prix_achat' => 'required|numeric|min:1',
+        ]);
+        // for each intrant create intrant stock and update stock
+        foreach ($validatedData['intrants'] as $intrantData) {
+            $intrant = Intrant::findOrFail($intrantData['intrant_id']);
+           $stock = $intrant->stock;
+           if ($stock == null){
+               $stock = $intrant->stock()->create([
+                   "quantite" => $intrantData['quantite'],
+                   "nom" => "Stock de " . $intrant->nom. ": du ".now()->format('Y-m-d H:i'),
+                   "code_bar" => now()->timestamp, // generate a unique code bar (timestamp
+                   "prix_achat" => $intrantData['prix_achat'],
+                   "boulangerie_id" => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+               ]);
+
+               $stock->mouvements()->create([
+                   "quantite" => $intrantData['quantite'],
+                   "stock_avant" => 0,
+                   "stock_apres" => $intrantData['quantite'],
+                   "type" => "in",
+                   "metadata" => $stock->toArray(),
+                   'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+               ]);
+
+           }else {
+               $stock->update([
+                   "quantite" => $stock->quantite + $intrantData['quantite'],
+                   "nom" => "Stock de " . $intrant->nom . ": du " . now()->format('Y-m-d H:i'),
+                   "code_bar" => now()->timestamp, // generate a unique code bar (timestamp
+                   "prix_achat" => $intrantData['prix_achat'],
+                   "boulangerie_id" => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+
+               ]);
+                $stock->mouvements()->create([
+                     "quantite" => $intrantData['quantite'],
+                     "stock_avant" => $stock->quantite - $intrantData['quantite'],
+                     "stock_apres" => $stock->quantite,
+                     "type" => "in",
+                     "metadata" => $stock->toArray(),
+                        'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id
+                ]);
+           }
+        }
+        return response()->json(["message"=>"Stock mis à jour"], 201);
+    }
+    public function sortieStock(Intrant $intrant)
+    {
+        $validatedData = request()->validate([
+            'quantite' => 'required|integer|min:1',
+        ]);
+
+        // find stock to update
+        $stock = $intrant->stock;
+        if ($stock->quantite < $validatedData['quantite']){
+            return response()->json(["message"=>"Quantite insuffisante"], 422);
+        }
+
+        $stock->diminuerStock($validatedData['quantite']);
+        $stock->save();
+
+    }
+    /**
+     * Get movements for a specific intrant.
+     *
+     * @param Intrant $intrant
+     * @return JsonResponse
+     */
+    public function getMovements(Intrant $intrant)
+    {
+        $movements = MouveIntrant::whereHas('stockIntrant', function($query) use ($intrant) {
+            $query->where('intrant_id', $intrant->id);
+        })->orderByDesc('created_at')->get()->map(function ($movement) {
+            return [
+                'id' => $movement->id,
+                'type' => $movement->type,
+                'quantite' => $movement->quantite,
+                'stock_avant' => $movement->stock_avant,
+                'stock_apres' => $movement->stock_apres,
+                'created_at' => $movement->created_at->toDateTimeString(),
+                'metadata' => $movement->metadata,
+            ];
+        });
+
+        return response()->json($movements);
+    }
+
+
+}
+
+
+VersementController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Resources\VersementResource;
+use App\Models\Abonnement;
+use App\Models\Boulangerie;
+use App\Models\Boutique;
+use App\Models\Caisse;
+use App\Models\Client;
+use App\Models\CompteLivreur;
+use App\Models\Livreur;
+use App\Models\Versement;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class VersementController extends Controller
+{
+    public function index()
+    {
+        return response()->json(Livreur::where('is_active',true)->get());
+
+    }
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'montant' => 'required|numeric',
+            'nombre_retour' => 'required|integer',
+            'nombre_pain_matin' => 'required|integer',
+            "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
+            "date_versement"=>"required|date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
+            'livreur_id' => 'integer|exists:livreurs,id',
+            'client_id' => 'integer|exists:clients,id',
+            'abonnement_id' => 'integer|exists:abonnements,id',
+            'boutique_id' => 'integer|exists:boutiques,id',
+        ]);
+        if (!isset($data['caisse_id'])){
+            $data['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
+        }
+        // if neither livreur_id, client_id, abonnement_id, boutique_id is set, then it's a 422 error
+        if (!isset($data['livreur_id']) && !isset($data['client_id']) && !isset($data['abonnement_id']) && !isset($data['boutique_id'])){
+            return response()->json(['message' => 'Vous devez choisir un livreur, un client, un abonnement ou une 
+            boutique'], 422);
+        }
+        $versement = new Versement($data);
+        $montant_verse = $data['montant'];
+
+        DB::transaction(function () use ($data, $versement, $montant_verse) {
+
+        $versement->montant_verse = $data['montant'];
+        $versement->nombre_retour = $data['nombre_retour'];
+        $versement->date_versement = $data['date_versement'];
+
+        $versement->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        if ($versement->isForLivreur()){
+            $livreur = Livreur::findOrFail($data['livreur_id']);
+            $versement->livreur()->associate($livreur);
+
+            // vérifier le montant versé par le livreur pour savoir s'il doit de l'argent ou on doit réduire son solde reliquat
+            $compte_livreur = $livreur->compteLivreur;
+            $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $data['nombre_retour'];
+            $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
+            $montant_verse = $data['montant'];
+
+            if ($montant_verse > $montant_a_verser) {
+                $compte_livreur->solde_reliquat -= ($montant_verse - $montant_a_verser);
+            }elseif ($montant_verse < $montant_a_verser){
+                $compte_livreur->solde_reliquat += ($montant_a_verser - $montant_verse);
+            }
+            $compte_data = $compte_livreur->toArray();
+            $versement->compte_data = $compte_data;
+            $versement->save();
+
+            $compte_livreur->dette = 0;
+            $compte_livreur->solde_pain = 0;
+            $compte_livreur->save();
+        }elseif ($versement->isForClient()) {
+            $versement->client()->associate(Client::find($data['client_id']));
+            $compte_client = $versement->client->compteClient;
+            $compte_client->dette = 0;
+            $compte_client->solde_pain = 0;
+            $compte_client->save();
+            // calculate reliquat
+
+        }
+        elseif ($versement->isForBoutique()) {
+            $versement->boutique()->associate(Boutique::find($data['boutique_id']));
+        }
+        elseif ($versement->isForAbonnement()) {
+            $versement->abonnement()->associate(Abonnement::find($data['abonnement_id']));
+        }
+
+        $versement->caisse()->associate(Caisse::find($data['caisse_id']));
+        $versement->save();
+
+        $caisse = Caisse::find($data['caisse_id']);
+        $caisse->augmenterSolde($montant_verse);
+        });
+
+
+        return response()->json($versement, 201);
+    }
+    // update versement
+    public function update(Versement $versement)
+    {
+        $data = request()->validate([
+            'montant' => 'numeric',
+            'nombre_retour' => 'integer',
+            'nombre_pain_matin' => 'integer',
+            "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
+            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
+            'livreur_id' => 'nullable|integer|exists:livreurs,id',
+            'client_id' => 'nullable|integer|exists:clients,id',
+            'abonnement_id' => 'nullable|integer|exists:abonnements,id',
+            'boutique_id' => 'nullable|integer|exists:boutiques,id',
+        ]);
+
+        DB::transaction(function () use ($data, $versement) {
+            $versement->montant_verse = $data['montant'];
+            $versement->nombre_retour = $data['nombre_retour'];
+            $versement->date_versement = $data['date_versement'];
+            $versement->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+
+            $livreur = Livreur::findOrFail($data['livreur_id']);
+            $versement->livreur()->associate($livreur);
+            $versement->caisse()->associate(Caisse::find($data['caisse_id']));
+
+            $versement->save();
+
+            // vérifier le montant versé par le livreur pour savoir s'il doit de l'argent ou on doit réduire son solde reliquat
+            $compte_livreur = $livreur->compteLivreur;
+            $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $data['nombre_retour'];
+            $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
+            $montant_verse = $data['montant'];
+
+            if ($montant_verse > $montant_a_verser) {
+                $compte_livreur->solde_reliquat -= ($montant_verse - $montant_a_verser);
+            } elseif ($montant_verse < $montant_a_verser) {
+                $compte_livreur->solde_reliquat += ($montant_a_verser - $montant_verse);
+            }
+            $compte_data = $compte_livreur->toArray();
+            $versement->compte_data = $compte_data;
+        });
+
+    }
+    public function destroy(Versement $versement)
+    {
+
+        DB::transaction(function () use ($versement) {
+            $livreur = $versement->livreur;
+            $compte_livreur = $livreur->compteLivreur;
+            $compte_livreurWhenVersementWasMade = new CompteLivreur($versement->compte_data);
+
+            $compte_livreur->augmenterDette($compte_livreurWhenVersementWasMade->dette);
+            $compte_livreur->augmenterSoldePain($compte_livreurWhenVersementWasMade->solde_pain);
+            // check if we should increase or decrease the solde reliquat
+            $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $versement->nombre_retour;
+            $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
+            $montant_verse = $versement->montant_verse;
+
+            // TODO recalculer reliquat
+            $compte_livreur->save();
+            /** @var  $caisse Caisse */
+            $caisse = Caisse::find($versement->caisse_id);
+            $solde_avant = $caisse->solde;
+            $caisse->diminuerSolde($montant_verse);
+            $caisse->transactions()->create([
+                'montant' => $montant_verse,
+                'type' => 'cashout',
+                "solde_apres" => $caisse->solde + $montant_verse,
+                "solde_avant" => $solde_avant,
+
+                'commentaire' => 'Suppression du versement'
+            ]);
+            $caisse->save();
+            $versement->delete();
+
+        });
+        return response()->json(null, 204);
+
+    }
+
+    public function versementsLivreurs()
+    {
+        Versement::factory()->count(10)->create();
+        $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
+        $livreurs = $boulangerie->livreurs()->with('versements')->where('is_active',true)->get();
+
+        return response()->json($livreurs);
+
+    }
+    public function versementsDate($date){
+
+        $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
+        // group versements by livreur, client, boutique, abonnement
+        $livreurs = $boulangerie->versements()->whereDate('created_at',$date)->where('livreur_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+        $clients = $boulangerie->versements()->whereDate('created_at',$date)->where('client_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+        $abonnements = $boulangerie->versements()->whereDate('created_at',$date)->where('abonnement_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+        $boutiques = $boulangerie->versements()->whereDate('created_at',$date)->where('boutique_id','!=',null)
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'livreurs' => VersementResource::collection($livreurs),
+            'clients' => VersementResource::collection($clients),
+            'abonnements' => VersementResource::collection($abonnements),
+            'boutiques' => VersementResource::collection($boutiques),
+        ]);
+    }
+}
+
+
+
+Here are my Factories:
+AbonnementFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Abonnement;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class AbonnementFactory extends Factory
+{
+    protected $model = Abonnement::class;
+
+    public function definition(): array
+    {
+        return [
+            'date_debut' => Carbon::now()->toDateString(),
+            'date_fin' => Carbon::now()->addMonth()->toDateString()
+        ];
+    }
+}
+
+
+ArticleFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Article;
+use App\Models\Boulangerie;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class ArticleFactory extends Factory
+{
+    protected $model = Article::class;
+
+    public function definition(): array
+    {
+        return [
+            'nom' => $this->faker->unique()->word,
+            'prix' => $this->faker->numberBetween(100, 10000),
+            'boulangerie_id' => Boulangerie::factory()::mockActiveBoulangerie()->id,
+        ];
+    }
+}
+
+
+ArticleProdPatisserieFactory.php
+<?php
+
+namespace Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ArticleProdPatisserie>
+ */
+class ArticleProdPatisserieFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            //
+        ];
+    }
+}
+
+
+BoulangerieFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Company;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * @extends Factory<Boulangerie>
+ */
+class BoulangerieFactory extends Factory
+{
+
+    static ?Boulangerie $boulangerieSingleton = null;
+
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            "nom" => $this->faker->company(),
+            "created_at" => now(),
+            "company_id" => Company::factory()->create()->id,
+            //
+        ];
+    }
+
+
+    public static function mockActiveBoulangerie(): Boulangerie
+    {
+        if (self::$boulangerieSingleton === null) {
+            self::$boulangerieSingleton = Boulangerie::factory()->create();
+        }
+        return self::$boulangerieSingleton;
+    }
+
+
+}
+
+
+BoutiqueFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boutique;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class BoutiqueFactory extends Factory
+{
+    protected $model = Boutique::class;
+
+    public function definition(): array
+    {
+        return [
+            'nom' => $this->faker->company(),
+            'solde_pain' => 0,
+            'adresse' => $this->faker->address(),
+
+        ];
+    }
+}
+
+
+CaisseFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Caisse>
+ */
+class CaisseFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        $definition = [
+            "nom" => "Caisse Principale",
+
+            //
+        ];
+        // if env is testing, we can add the following fields
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+CaisseTransactionFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\CaisseTransaction;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<CaisseTransaction>
+ */
+class CaisseTransactionFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            'montant' => $this->faker->randomNumber(9),
+            'commentaire' => $this->faker->sentence(),
+            'solde_avant' => $this->faker->randomNumber(9),
+            'solde_apres' => $this->faker->randomNumber(9),
+            'type' => $this->faker->randomElement(['cashin', 'cashout']),
+            'metadata' => $this->faker->hslColorAsArray(),
+            'created_at' => $this->faker->dateTimeBetween(startDate: '-30 days',     endDate: 'now'),
+
+        ];
+    }
+}
+
+
+ChariotFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Caisse>
+ */
+class ChariotFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        $definition = [
+            "nom" => "Chariot ".$this->faker->numberBetween(100, 500)." pains ",
+            "nombre_pain" => $this->faker->numberBetween(100, 500),
+
+            //
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+ChariotProdPanetierFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Chariot;
+use App\Models\ChariotProdPanetier;
+use App\Models\ProductionPanetier;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class ChariotProdPanetierFactory extends Factory
+{
+    protected $model = ChariotProdPanetier::class;
+
+    public function definition(): array
+    {
+        return [
+            'production_panetier_id' => ProductionPanetier::factory(),
+            'chariot_id' => Chariot::factory(),
+            'nombre' => $this->faker->numberBetween(100, 1000),
+        ];
+    }
+}
+
+
+ClientFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Client;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class ClientFactory extends Factory
+{
+    protected $model = Client::class;
+
+    public function definition(): array
+    {
+        return [
+            'prenom' => $this->faker->firstName(),
+            'nom' => $this->faker->lastName(),
+            'telephone' => $this->faker->phoneNumber(),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ];
+    }
+}
+
+
+CompanyFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Company;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Company>
+ */
+class CompanyFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            "nom" => $this->faker->company(),
+            "created_at" => now(),
+            //
+        ];
+    }
+}
+
+
+CompteClientFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Client;
+use App\Models\CompteClient;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class CompteClientFactory extends Factory
+{
+    protected $model = CompteClient::class;
+
+    public function definition(): array
+    {
+        return [
+            'solde_pain' => 0,
+            'dette' => 0,
+            'solde_reliquat' => 0,
+        ];
+    }
+}
+
+
+CompteLivreurFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\CompteLivreur;
+use App\Models\Livreur;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class CompteLivreurFactory extends Factory
+{
+    protected $model = CompteLivreur::class;
+
+    public function definition(): array
+    {
+        return [
+            'solde_pain' => 0,
+            'dette' =>0,
+            'solde_reliquat' => 0,
+        ];
+    }
+}
+
+
+DepenseFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Caisse;
+use App\Models\Depense;
+use App\Models\TypeDepense;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class DepenseFactory extends Factory
+{
+    protected $model = Depense::class;
+
+    public function definition(): array
+    {
+        $definition= [
+            'type_depense_id' => TypeDepense::factory(),
+            'montant' => $this->faker->numberBetween(1000, 1000000),
+            'commentaire' => $this->faker->sentence(10),
+        ];
+        if (app()->environment('testing')) {
+            $definition["caisse_id"] =  Caisse::requireCaisseOfLoggedInUser();
+        }
+        return $definition;
+    }
+}
+
+
+DistribPanetierFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\DistribPanetier;
+use App\Models\Livreur;
+use App\Models\ProductionPanetier;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Termwind\Components\Li;
+
+class DistribPanetierFactory extends Factory
+{
+    protected $model = DistribPanetier::class;
+
+    public function definition(): array
+    {
+        $definition = [
+            "livreur_id" => Livreur::factory(),
+            "nombre_pain" => $this->faker->numberBetween(100, 1000)
+        ];
+         if (app()->environment('testing')) {
+             $definition["production_panetier_id"] =  ProductionPanetier::factory();
+         }
+         return $definition;
+    }
+
+}
+
+
+IntrantFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Intrant;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class IntrantFactory extends Factory
+{
+    protected $model = Intrant::class;
+
+    public function definition(): array
+    {
+        return [
+            'nom' => $this->faker->unique()->word(),
+        ];
+    }
+    public function configure(): IntrantFactory
+    {
+        return $this->afterCreating(function (Intrant $intrant) {
+            $intrant->stock()->create([
+                "boulangerie_id" => $intrant->boulangerie_id,
+                "quantite" => 100,
+                "code_bar" => $this->faker->unique()->randomNumber(9),
+                "prix_achat" => 0,
+                "nom" => "Stock de ".$intrant->nom,
+
+            ]);
+        });
+    }
+}
+
+
+LivreurFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Livreur;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class LivreurFactory extends Factory
+{
+    protected $model = Livreur::class;
+
+    public function definition(): array
+    {
+        $definition = [
+            'prenom' => $this->faker->firstName(),
+            'nom' => $this->faker->lastName(),
+            'telephone' => $this->faker->phoneNumber(),
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+    // add compte livreur
+    public function configure(): LivreurFactory
+    {
+        return $this->afterCreating(function (Livreur $livreur) {
+            $livreur->compteLivreur()->create([
+                'solde_pain' => 0,
+                'dette' => 0,
+                'solde_reliquat' => 0,
+            ]);
+        });
+    }
+}
+
+
+MouveIntrantFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\MouveIntrant;
+use App\Models\StockIntrant;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class MouveIntrantFactory extends Factory
+{
+    protected $model = MouveIntrant::class;
+
+    public function definition(): array
+    {
+        $definition = [
+            'quantite' => $this->faker->randomNumber(),
+            'stock_avant' => $this->faker->randomNumber(),
+            'stock_apres' => $this->faker->randomNumber(),
+            'type' => $this->faker->randomElement(['in', 'out']),
+            'metadata' => $this->faker->shuffleArray(['key' => 'value']),
+
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ];
+        if (app()->environment() === 'testing') {
+            $definition['boutique_id'] = Boulangerie::factory();
+            $definition['stock_intrant_id'] = StockIntrant::factory();
+        }
+        return  $definition;
+    }
+}
+
+
+ProdPatisserieFactory.php
+<?php
+
+namespace Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ProdPatisserie>
+ */
+class ProdPatisserieFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+            //
+        ];
+    }
+}
+
+
+ProductionPanetierFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\ProductionPanetier;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class ProductionPanetierFactory extends Factory
+{
+    protected $model = ProductionPanetier::class;
+
+    public function definition(): array
+    {
+        $definition= [
+            'date_production' => today()->toDateString(),
+            'nombre_pain' => $this->faker->numberBetween(1000,10000),
+            'nombre_plat' => $this->faker->numberBetween(100,1000),
+            'nombre_sac' => $this->faker->numberBetween(1,100),
+            'ration' => $this->faker->numberBetween(10,100),
+            'donation' => $this->faker->numberBetween(10,100),
+            'casse' => $this->faker->numberBetween(10,100),
+            'mange' => $this->faker->numberBetween(10,100),
+            'periode' => $this->faker->randomElement(['matin', 'soir']),
+
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+ProductionPetrisseurFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Company;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Company>
+ */
+class ProductionPetrisseurFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        $definition = [
+            "date_production" => $this->faker->date(),
+            "nombre_chariot" => $this->faker->numberBetween(1, 100),
+            "nombre_pain" => $this->faker->numberBetween(3000, 9000),
+            "nombre_plat" => $this->faker->numberBetween(1, 100),
+            "nombre_sac" => $this->faker->numberBetween(1, 30),
+
+            //
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+RecetteFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\Recette;
+use App\Models\TypeRecette;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends Factory<Recette>
+ */
+class RecetteFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        return [
+
+            'montant' => $this->faker->numberBetween(100, 1000000),
+            "type_recette_id" => TypeRecette::factory(),
+            "boulangerie_id" => Boulangerie::factory(),
+            'commentaire' => $this->faker->sentence(15),
+
+        ];
+    }
+}
+
+
+TypeDepenseFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\TypeDepense;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class TypeDepenseFactory extends Factory
+{
+    protected $model = TypeDepense::class;
+
+    public function definition(): array
+    {
+        $definition = [
+            'nom' => $this->faker->name(),
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+TypeRecetteFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\TypeRecette>
+ */
+class TypeRecetteFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     *
+     * @return array<string, mixed>
+     */
+    public function definition(): array
+    {
+        $definition = [
+            'nom' => $this->faker->word,
+
+
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+UserFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
+
+class UserFactory extends Factory
+{
+    protected $model = User::class;
+
+    public function definition(): array
+    {
+        return [
+            'name' => $this->faker->name(),
+            'email' => $this->faker->unique()->safeEmail(),
+            'email_verified_at' => Carbon::now(),
+            'password' => bcrypt($this->faker->password()),
+            'remember_token' => Str::random(10),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ];
+    }
+}
+
+
+VersementFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Boulangerie;
+use App\Models\Caisse;
+use App\Models\CompteLivreur;
+use App\Models\Livreur;
+use App\Models\Versement;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class VersementFactory extends Factory
+{
+    protected $model = Versement::class;
+
+    public function definition(): array
+    {
+        $definition = [
+            'nombre_pain_matin' => $this->faker->randomNumber(),
+            'nombre_pain_soir' => $this->faker->randomNumber(),
+            'nombre_retour' => $this->faker->randomNumber(),
+            'montant_verse' => $this->faker->numberBetween(10000, 900000),
+            'date_versement' => Carbon::now(),
+            'caisse_id' => Caisse::factory(),
+            'compte_data'=>(new CompteLivreur([
+                'solde_pain'=> $this->faker->randomNumber(),
+                'solde_reliquat'=> $this->faker->randomNumber(),
+                "dette" => $this->faker->randomNumber(),
+                "prix_pain" => $this->faker->randomNumber(),
+            ]))->toArray(),
+        ];
+        if (app()->environment('testing')) {
+            $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;
+        }
+        return $definition;
+    }
+}
+
+
+

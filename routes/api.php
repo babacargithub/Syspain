@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\ArticleController;
+use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\DistribPanetierController;
 use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\PanetierController;
 use App\Http\Controllers\PetrisseurController;
 use App\Http\Controllers\IntrantController;
+use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
@@ -42,6 +45,11 @@ Route::resource('depenses', DepenseController::class);
 Route::resource('intrants', IntrantController::class);
 Route::post('stocks/entree',[StockController::class,'entreeStock']);
 Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
+Route::get('stocks/movements/{intrant}', [StockController::class, 'getMovements']);
+Route::put('clients/{client}/toggle', [ClientController::class, 'toggle']);
+
+Route::resource('clients', ClientController::class);
+
 Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
 Route::resource('recettes', RecetteController::class);
 Route::get('chariots',function (){
@@ -70,6 +78,10 @@ Route::get('types_depenses_recettes',function (){
         }),
     ]);
 });
+Route::resource('articles', ArticleController::class);
+Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
+Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
+Route::resource('production_patisseries', ProdPatisserieController::class);
 
 
 
