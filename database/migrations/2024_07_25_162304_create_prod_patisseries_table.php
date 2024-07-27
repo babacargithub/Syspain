@@ -11,12 +11,16 @@ class CreateProdPatisseriesTable extends Migration
      * Run the migrations.
      */
     public function up(): void
-    {
+    {/**/
         Schema::create('prod_patisseries', function (Blueprint $table) {
             $table->id();
             $table->date('date_production');
-            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
-            $table->unique(['date_production', 'boulangerie_id']);
+            $table->enum('periode', ['matin', 'soir']);
+            $table->foreignIdFor(Boulangerie::class)
+                ->constrained()
+                ->cascadeOnDelete()
+                ->cascadeOnUpdate();
+            $table->unique(['date_production','periode', 'boulangerie_id']);
             $table->timestamps();
         });
     }

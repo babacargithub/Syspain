@@ -116,6 +116,8 @@ class DevDatabaseSeeder extends Seeder
             return [
                 "article_id"=>$article->id,
                 "prod_patisserie_id"=>$prodPatisserie->id,
+                'restant' => rand(1, 10),
+                'retour' => rand(1, 10),
                 'quantite' => rand(1, 100),
             ];
         });

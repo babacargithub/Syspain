@@ -79,9 +79,15 @@ Route::get('types_depenses_recettes',function (){
     ]);
 });
 Route::resource('articles', ArticleController::class);
+Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
+    'deleteArticle']);
 Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
 Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
-Route::resource('production_patisseries', ProdPatisserieController::class);
+Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieController::class, 'updateArticles']);
+
+Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
+    'production_patisseries' => 'prodPatisserie',
+]);
 
 
 

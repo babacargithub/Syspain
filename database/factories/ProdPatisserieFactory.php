@@ -14,6 +14,7 @@ class ProdPatisserieFactory extends Factory
     {
         return [
             'date_production' => today()->toDateString(),
+            'periode' => $this->faker->randomElement(['matin', 'soir']),
 //            'boulangerie_id' => Boulangerie::factory()::mockActiveBoulangerie(),
         ];
     }

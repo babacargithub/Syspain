@@ -13,6 +13,8 @@ class ArticleProdPatisserie extends Model
     protected $fillable = [
         'article_id',
         'prod_patisserie_id',
+        'retour',
+        'restant',
         'quantite',
     ];
 
@@ -25,6 +27,24 @@ class ArticleProdPatisserie extends Model
     {
         return $this->belongsTo(ProdPatisserie::class);
     }
+
+    public function nombreVerser(): int
+    {
+        return ($this->quantite - $this->restant - $this->retour);
+    }
+    public function montantAVerser(): int
+    {
+        return ($this->quantite - $this->restant - $this->retour) * $this->article->prix;
+    }
+    public function getNombreVerserAttribute(): int
+    {
+        return $this->nombreVerser();
+    }
+    public function getMontantAVerserAttribute(): int
+    {
+        return $this->montantAVerser();
+    }
+    protected $appends = ['nombre_verser', 'montant_a_verser'];
 
 
 }

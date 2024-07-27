@@ -16,6 +16,8 @@ class ArticleProdPatisserieFactory extends Factory
         return [
             'article_id' => Article::factory(),
             'prod_patisserie_id' => ProdPatisserie::factory(),
+            'restant' => $this->faker->numberBetween(1, 10),
+            'retour' => $this->faker->numberBetween(1, 10),
             'quantite' => $this->faker->numberBetween(1, 100),
         ];
     }

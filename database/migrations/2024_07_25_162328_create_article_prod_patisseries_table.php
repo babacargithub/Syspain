@@ -18,6 +18,8 @@ class CreateArticleProdPatisseriesTable extends Migration
             $table->foreignIdFor(Article::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->foreignIdFor(ProdPatisserie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->integer('quantite');
+            $table->integer('retour')->default(0);
+            $table->integer('restant')->default(0);
             $table->timestamps();
         });
     }

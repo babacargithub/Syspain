@@ -39,6 +39,7 @@ Article.php
 
 namespace App\Models;
 
+use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,6 +48,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Article extends Model
 {
     use HasFactory, SoftDeletes;
+    use BoulangerieScope;
 
     protected $fillable = [
         'nom',
@@ -68,10 +70,49 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ArticleProdPatisserie extends Model
 {
     use HasFactory;
+
+    protected $fillable = [
+        'article_id',
+        'prod_patisserie_id',
+        'retour',
+        'restant',
+        'quantite',
+    ];
+
+    public function article(): BelongsTo
+    {
+        return $this->belongsTo(Article::class);
+    }
+
+    public function prodPatisserie(): BelongsTo
+    {
+        return $this->belongsTo(ProdPatisserie::class);
+    }
+
+    public function nombreVerser(): int
+    {
+        return ($this->quantite - $this->restant - $this->retour);
+    }
+    public function montantAVerser(): int
+    {
+        return ($this->quantite - $this->restant - $this->retour) * $this->article->prix;
+    }
+    public function getNombreVerserAttribute(): int
+    {
+        return $this->nombreVerser();
+    }
+    public function getMontantAVerserAttribute(): int
+    {
+        return $this->montantAVerser();
+    }
+    protected $appends = ['nombre_verser', 'montant_a_verser'];
+
+
 }
 
 
@@ -768,12 +809,44 @@ ProdPatisserie.php
 
 namespace App\Models;
 
+use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProdPatisserie extends Model
 {
     use HasFactory;
+    use BoulangerieScope;
+
+    protected $fillable = [
+        'date_production',
+        'boulangerie_id',
+        'periode'
+    ];
+
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
+
+
+    public function articles(): HasMany
+    {
+        return $this->hasMany(ArticleProdPatisserie::class);
+    }
+
+    public function getNombreAVerserAttribute(): int
+    {
+        return $this->articles->sum('nombre_verser');
+    }
+    public function getMontantAVerserAttribute(): int
+    {
+        return $this->articles->sum('montant_a_verser');
+    }
+    protected $appends = ['nombre_a_verser', 'montant_a_verser'];
+
 }
 
 
@@ -2405,19 +2478,27 @@ return new class extends Migration {
 2024_07_25_162304_create_prod_patisseries_table.php
 <?php
 
+use App\Models\Boulangerie;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+class CreateProdPatisseriesTable extends Migration
 {
     /**
      * Run the migrations.
      */
     public function up(): void
-    {
+    {/**/
         Schema::create('prod_patisseries', function (Blueprint $table) {
             $table->id();
+            $table->date('date_production');
+            $table->enum('periode', ['matin', 'soir']);
+            $table->foreignIdFor(Boulangerie::class)
+                ->constrained()
+                ->cascadeOnDelete()
+                ->cascadeOnUpdate();
+            $table->unique(['date_production','periode', 'boulangerie_id']);
             $table->timestamps();
         });
     }
@@ -2429,17 +2510,19 @@ return new class extends Migration
     {
         Schema::dropIfExists('prod_patisseries');
     }
-};
+}
 
 
 2024_07_25_162328_create_article_prod_patisseries_table.php
 <?php
 
+use App\Models\Article;
+use App\Models\ProdPatisserie;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+class CreateArticleProdPatisseriesTable extends Migration
 {
     /**
      * Run the migrations.
@@ -2448,6 +2531,11 @@ return new class extends Migration
     {
         Schema::create('article_prod_patisseries', function (Blueprint $table) {
             $table->id();
+            $table->foreignIdFor(Article::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->foreignIdFor(ProdPatisserie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->integer('quantite');
+            $table->integer('retour')->default(0);
+            $table->integer('restant')->default(0);
             $table->timestamps();
         });
     }
@@ -2459,7 +2547,7 @@ return new class extends Migration
     {
         Schema::dropIfExists('article_prod_patisseries');
     }
-};
+}
 
 
 
@@ -2467,6 +2555,7 @@ Here are my Routes:
 api.php
 <?php
 
+use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\DistribPanetierController;
@@ -2474,6 +2563,7 @@ use App\Http\Controllers\LivreurController;
 use App\Http\Controllers\PanetierController;
 use App\Http\Controllers\PetrisseurController;
 use App\Http\Controllers\IntrantController;
+use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
@@ -2543,6 +2633,12 @@ Route::get('types_depenses_recettes',function (){
         }),
     ]);
 });
+Route::resource('articles', ArticleController::class);
+Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
+    'deleteArticle']);
+Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
+Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
+Route::resource('production_patisseries', ProdPatisserieController::class);
 
 
 
@@ -2896,7 +2992,6 @@ class ArticleController extends Controller
      */
     public function destroy(Article $article)
     {
-        $article->delete();
 
         return response()->json(null, 204);
     }
@@ -3767,11 +3862,158 @@ ProdPatisserieController.php
 
 namespace App\Http\Controllers;
 
+use App\Models\ProdPatisserie;
+use App\Models\ArticleProdPatisserie;
+use App\Models\Boulangerie;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ProdPatisserieController extends Controller
 {
-    //
+    /**
+     *
+     * @return JsonResponse
+     */
+    public function index()
+    {
+        $prodPatisseries = ProdPatisserie::orderByDesc('date_production')
+            ->get();
+        return response()->json($prodPatisseries);
+    }
+
+    /**
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function store(Request $request)
+    {
+
+        $validatedData = $request->validate([
+            'date_production' => [
+                'required',
+                'date',
+                Rule::unique('prod_patisseries')
+                    ->where(function ($query) {
+                        return $query
+                            ->where('periode', request('periode'))
+                            ->where('date_production', request('date_production'));
+                    }) ],
+            // TODO change this later
+//            'periode' => 'required|in:matin,soir'
+            'periode' => 'in:matin,soir'
+        ], [
+            'date_production.unique' => 'On a déjà une production pour cette date et cette période'
+        ]);
+
+        $prodPatisserie = new ProdPatisserie($validatedData);
+        $prodPatisserie->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        $prodPatisserie->save();
+
+        return response()->json($prodPatisserie, 201);
+    }
+
+    /**
+     *
+     * @param ProdPatisserie $prodPatisserie
+     * @return JsonResponse
+     */
+    public function show(ProdPatisserie $prodPatisserie)
+    {
+        $prodPatisserie->load('articleProdPatisseries.article');
+        return response()->json($prodPatisserie);
+    }
+
+    /**
+     * Update the specified prod patisserie in storage.
+     *
+     * @param Request $request
+     * @param ProdPatisserie $prodPatisserie
+     * @return JsonResponse
+     */
+    public function update(Request $request, ProdPatisserie $prodPatisserie)
+    {
+        $validatedData = $request->validate([
+            'periode' => 'in:matin,soir',
+            'date_production' => [
+                'date',
+                Rule::unique('prod_patisseries')
+                    ->where(function ($query) {
+                        return $query
+                            ->where('periode', request('periode'))
+                            ->where('date_production', request('date_production'));
+                    })->ignore($prodPatisserie->id)],
+        ]);
+
+        $prodPatisserie->update($validatedData);
+
+        return response()->json($prodPatisserie);
+    }
+
+    /**
+     *
+     * @param ProdPatisserie $prodPatisserie
+     * @return JsonResponse
+     */
+    public function destroy(ProdPatisserie $prodPatisserie)
+    {
+        $prodPatisserie->delete();
+        return response()->json(null, 204);
+    }
+
+    /**
+     *
+     * @param Request $request
+     * @param ProdPatisserie $prodPatisserie
+     * @return JsonResponse
+     */
+    public function storeArticles(Request $request, ProdPatisserie $prodPatisserie)
+    {
+        $validatedData = $request->validate([
+            'articles' => 'required|array',
+            'articles.*.article_id' => 'required|exists:articles,id',
+            'articles.*.restant' => 'integer',
+            'articles.*.retour' => 'integer',
+            'articles.*.quantite' => 'required|integer|min:1',
+        ]);
+
+        DB::transaction(function () use ($validatedData, $prodPatisserie) {
+            foreach ($validatedData['articles'] as $articleData) {
+                $articleProdPatisserie = new ArticleProdPatisserie($articleData);
+                $articleProdPatisserie->prod_patisserie_id = $prodPatisserie->id;
+                $articleProdPatisserie->save();
+            }
+        });
+
+        return response()->json(['message' => 'Articles added successfully'], 201);
+    }
+
+    /**
+     *
+     * @param ProdPatisserie $prodPatisserie
+     * @return JsonResponse
+     */
+    public function getArticles(ProdPatisserie $prodPatisserie)
+    {
+        $articles = $prodPatisserie->articles->map(function ($articleProdPatisserie) {
+            return [
+                'id' => $articleProdPatisserie->id,
+                'article_id' => $articleProdPatisserie->article_id,
+                'quantite' => $articleProdPatisserie->quantite,
+                'restant' => $articleProdPatisserie->restant,
+                'retour' => $articleProdPatisserie->retour,
+                'article_nom' => $articleProdPatisserie->article->nom,
+            ];
+        });
+
+        return response()->json($articles);
+    }
+    public function deleteArticle(ArticleProdPatisserie $articleProdPatisserie){
+        $articleProdPatisserie->delete();
+        return response()->json(null, 204);
+    }
 }
 
 
@@ -4338,22 +4580,23 @@ ArticleProdPatisserieFactory.php
 
 namespace Database\Factories;
 
+use App\Models\ArticleProdPatisserie;
+use App\Models\Article;
+use App\Models\ProdPatisserie;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ArticleProdPatisserie>
- */
 class ArticleProdPatisserieFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
+    protected $model = ArticleProdPatisserie::class;
+
     public function definition(): array
     {
         return [
-            //
+            'article_id' => Article::factory(),
+            'prod_patisserie_id' => ProdPatisserie::factory(),
+            'restant' => $this->faker->numberBetween(1, 10),
+            'retour' => $this->faker->numberBetween(1, 10),
+            'quantite' => $this->faker->numberBetween(1, 100),
         ];
     }
 }
@@ -4844,22 +5087,20 @@ ProdPatisserieFactory.php
 
 namespace Database\Factories;
 
+use App\Models\ProdPatisserie;
+use App\Models\Boulangerie;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\ProdPatisserie>
- */
 class ProdPatisserieFactory extends Factory
 {
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
+    protected $model = ProdPatisserie::class;
+
     public function definition(): array
     {
         return [
-            //
+            'date_production' => today()->toDateString(),
+            'periode' => $this->faker->randomElement(['matin', 'soir']),
+//            'boulangerie_id' => Boulangerie::factory()::mockActiveBoulangerie(),
         ];
     }
 }

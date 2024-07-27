@@ -16,6 +16,7 @@ class ProdPatisserie extends Model
     protected $fillable = [
         'date_production',
         'boulangerie_id',
+        'periode'
     ];
 
     public function boulangerie(): BelongsTo
@@ -23,8 +24,20 @@ class ProdPatisserie extends Model
         return $this->belongsTo(Boulangerie::class);
     }
 
+
     public function articles(): HasMany
     {
         return $this->hasMany(ArticleProdPatisserie::class);
     }
+
+    public function getNombreAVerserAttribute(): int
+    {
+        return $this->articles->sum('nombre_verser');
+    }
+    public function getMontantAVerserAttribute(): int
+    {
+        return $this->articles->sum('montant_a_verser');
+    }
+    protected $appends = ['nombre_a_verser', 'montant_a_verser'];
+
 }
