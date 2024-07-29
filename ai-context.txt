@@ -129,7 +129,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Boulangerie extends Model
 {
     use HasFactory;
-    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client"];
+    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client","boulangerie_id"];
 
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {
@@ -429,6 +429,11 @@ use Illuminate\Database\Eloquent\Model;
 class ChariotProdPetrisseur extends Model
 {
     use HasFactory;
+    protected $fillable = [
+        'chariot_id',
+        'production_petrisseur_id',
+        'nombre'
+    ];
 }
 
 
@@ -823,9 +828,12 @@ class ProdPatisserie extends Model
     protected $fillable = [
         'date_production',
         'boulangerie_id',
+        'verse',
         'periode'
     ];
-
+    protected $casts = [
+        'verse' => 'boolean'
+    ];
     public function boulangerie(): BelongsTo
     {
         return $this->belongsTo(Boulangerie::class);
@@ -837,10 +845,12 @@ class ProdPatisserie extends Model
         return $this->hasMany(ArticleProdPatisserie::class);
     }
 
+    /** @noinspection PhpUnused */
     public function getNombreAVerserAttribute(): int
     {
         return $this->articles->sum('nombre_verser');
     }
+    /** @noinspection PhpUnused */
     public function getMontantAVerserAttribute(): int
     {
         return $this->articles->sum('montant_a_verser');
@@ -965,6 +975,7 @@ use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property mixed $date_production
@@ -979,6 +990,10 @@ class ProductionPetrisseur extends Model
     public function boulangerie(): BelongsTo
     {
         return $this->belongsTo(Boulangerie::class);
+    }
+    public function chariots(): HasMany
+    {
+        return $this->hasMany(ChariotProdPetrisseur::class);
     }
 
     public function totalPain() : int
@@ -1734,6 +1749,7 @@ class CreateClientsTable extends Migration
             $table->string('prenom');
             $table->string('nom');
             $table->string('telephone');
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
         });
@@ -2065,6 +2081,7 @@ return new class extends Migration
             $table->id();
             $table->foreignIdFor(ProductionPetrisseur::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->foreignIdFor(Chariot::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->integer('nombre');
             $table->timestamps();
         });
     }
@@ -2499,6 +2516,7 @@ class CreateProdPatisseriesTable extends Migration
                 ->cascadeOnDelete()
                 ->cascadeOnUpdate();
             $table->unique(['date_production','periode', 'boulangerie_id']);
+            $table->boolean('verse')->default(false);
             $table->timestamps();
         });
     }
@@ -2567,6 +2585,7 @@ use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
+use App\Models\Caisse;
 use App\Models\Chariot;
 use App\Models\Depense;
 use App\Models\TypeDepense;
@@ -2636,9 +2655,21 @@ Route::get('types_depenses_recettes',function (){
 Route::resource('articles', ArticleController::class);
 Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
     'deleteArticle']);
+Route::post('production_patisseries/{prodPatisserie}/encaisser', [ProdPatisserieController::class, 'encaisserProdPatisserie']);
 Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
 Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
-Route::resource('production_patisseries', ProdPatisserieController::class);
+Route::get('production_patisseries/date/{date}', [ProdPatisserieController::class, 'getProdPatisserieByDate']);
+Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieController::class, 'updateArticles']);
+
+Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
+    'production_patisseries' => 'prodPatisserie',
+]);
+Route::get('caisse',function (){
+
+    $caisse = Caisse::requireCaisseOfLoggedInUser();
+    return response()->json(["solde" => $caisse->solde]);
+
+});
 
 
 
@@ -3781,6 +3812,7 @@ PetrisseurController.php
 namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
+use App\Models\ChariotProdPetrisseur;
 use App\Models\Company;
 use App\Models\Intrant;
 use App\Models\ProductionPetrisseur;
@@ -3803,21 +3835,29 @@ class PetrisseurController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'date_production' => 'required|date|unique:production_petrisseurs|date_format:Y-m-d',
-            'nombre_chariot' => 'required|integer',
+            // date production should be unique for a boulangerie_id
+            'date_production' => 'required|date:Y-m-d|unique:production_petrisseurs,date_production,NULL,id,boulangerie_id,' . Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            'nombre_chariot' => 'integer',
             'nombre_sac'  => 'required|integer', // 'nombre_sac' => 'required|integer
             'nombre_plat'  => 'required|integer',
-            'nombre_pain'  => 'required|integer',
+            'nombre_pain'  => 'integer',
             "rendement" => 'integer',
+            "chariots" => 'required|array',
         ], [
             'date_production.unique' => 'La production de cette date a déjà été enregistrée',
         ]);
         $production = new ProductionPetrisseur($data);
 
+        // attach chariots
+        $chariots = collect($data['chariots'])->map(function ($chariot) {
+            return new ChariotProdPetrisseur($chariot);
+        });
+
         $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
 
         $production->boulangerie()->associate($boulangerie);
         $production->save();
+        $production->chariots()->saveMany($chariots);
         // réduire stock de farine
         $intrantFarine = Intrant::where('nom', 'LIKE','%farine%')
             ->whereBoulangerieId($boulangerie->id)
@@ -3862,9 +3902,13 @@ ProdPatisserieController.php
 
 namespace App\Http\Controllers;
 
+use App\Models\Caisse;
 use App\Models\ProdPatisserie;
 use App\Models\ArticleProdPatisserie;
 use App\Models\Boulangerie;
+use App\Models\Recette;
+use App\Models\TypeRecette;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -3879,6 +3923,14 @@ class ProdPatisserieController extends Controller
     public function index()
     {
         $prodPatisseries = ProdPatisserie::orderByDesc('date_production')
+            ->get();
+        return response()->json($prodPatisseries);
+    }
+    // get prod patisserie of a specific date
+    public function getProdPatisserieByDate(Request $request, $date)
+    {
+        $prodPatisseries = ProdPatisserie::where('date_production', $date)
+            ->orderByDesc('created_at')
             ->get();
         return response()->json($prodPatisseries);
     }
@@ -3901,8 +3953,7 @@ class ProdPatisserieController extends Controller
                             ->where('periode', request('periode'))
                             ->where('date_production', request('date_production'));
                     }) ],
-            // TODO change this later
-//            'periode' => 'required|in:matin,soir'
+
             'periode' => 'in:matin,soir'
         ], [
             'date_production.unique' => 'On a déjà une production pour cette date et cette période'
@@ -3959,7 +4010,7 @@ class ProdPatisserieController extends Controller
      */
     public function destroy(ProdPatisserie $prodPatisserie)
     {
-        $prodPatisserie->delete();
+        $prodPatisserie->forceDelete();
         return response()->json(null, 204);
     }
 
@@ -4010,10 +4061,86 @@ class ProdPatisserieController extends Controller
 
         return response()->json($articles);
     }
+    //// ======////-======
+
+    /**
+     * Update articles for the specified ProdPatisserie.
+     *
+     * @param Request $request
+     * @param ProdPatisserie $prodPatisserie
+     * @return JsonResponse
+     */
+    public function updateArticles(Request $request, ProdPatisserie $prodPatisserie)
+    {
+        $validatedData = $request->validate([
+            'articles' => 'required|array',
+            'articles.*.article_id' => 'required|exists:articles,id',
+            'articles.*.quantite' => 'required|integer|min:1',
+            'articles.*.retour' => 'nullable|integer|min:0',
+            'articles.*.restant' => 'nullable|integer|min:0',
+        ]);
+
+        DB::transaction(function () use ($validatedData, $prodPatisserie) {
+            foreach ($validatedData['articles'] as $articleData) {
+                $articleProdPatisserie = ArticleProdPatisserie::updateOrCreate(
+                    [
+                        'prod_patisserie_id' => $prodPatisserie->id,
+                        'article_id' => $articleData['article_id']
+                    ],
+                    [
+                        'quantite' => $articleData['quantite'],
+                        'retour' => $articleData['retour'] ?? 0,
+                        'restant' => $articleData['restant'] ?? 0,
+                    ]
+                );
+            }
+        });
+
+        return response()->json(['message' => 'Articles updated successfully'], 200);
+    }
+
+
+////-======
+
     public function deleteArticle(ArticleProdPatisserie $articleProdPatisserie){
         $articleProdPatisserie->delete();
         return response()->json(null, 204);
     }
+
+    public function encaisserProdPatisserie(Request $request, ProdPatisserie $prodPatisserie)
+    {
+        $data = $request->validate([
+            'montant' => 'required|numeric'
+        ]);
+        // create recettes
+        DB::transaction(function () use ($data, $prodPatisserie) {
+            $recette = new Recette();
+            $recette->montant = $data['montant'];
+            $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+            //TODO get type recette id
+            $typeRecette = TypeRecette::firstOrFail();
+            $recette->typeRecette()->associate($typeRecette);
+            Carbon::setLocale('fr');
+
+// Create a Carbon instance for the desired date
+            $date_formatted = Carbon::parse($prodPatisserie->date_production);
+
+// Format the date to the desired format
+            $formattedDate = $date_formatted->translatedFormat('l j F Y');
+            $recette->commentaire = "Encaissement de la production patisserie du " . $formattedDate." du " .
+                $prodPatisserie->periode;
+            $caisse = Caisse::requireCaisseOfLoggedInUser();
+            $recette->caisse()->associate($caisse);
+            $recette->save();
+            $caisse->augmenterSolde($data['montant'],$prodPatisserie->toArray());
+            $prodPatisserie->verse = true;
+            $prodPatisserie->save();
+        });
+        return response()->json(['message' => 'Encaissement effectué avec succès'], 200);
+
+
+    }
+
 }
 
 
@@ -4405,6 +4532,28 @@ class VersementController extends Controller
 
         $caisse = Caisse::find($data['caisse_id']);
         $caisse->augmenterSolde($montant_verse);
+
+            $identifier = '';
+
+            if ($versement->isForLivreur()) {
+                $identifier = $versement->livreur->identifier();
+            } elseif ($versement->isForClient()) {
+                $identifier = $versement->client->identifier();
+            } elseif ($versement->isForBoutique()) {
+                $identifier = $versement->boutique->identifier();
+            } else if ($versement->isForAbonnement()) {
+                $identifier = $versement->abonnement->identifier();
+            }
+
+// Create the recette with the determined identifier
+           $caisse->recettes()->create([
+                'montant' => $montant_verse,
+                // TODO get type recette id later
+                'type_recette_id' => 1,
+                'commentaire' => 'Versement de ' . $identifier,
+                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            ]);
+
         });
 
 
@@ -4799,6 +4948,27 @@ class ChariotProdPanetierFactory extends Factory
             'production_panetier_id' => ProductionPanetier::factory(),
             'chariot_id' => Chariot::factory(),
             'nombre' => $this->faker->numberBetween(100, 1000),
+        ];
+    }
+}
+
+
+ChariotProdPetrisseurFactory.php
+<?php
+
+namespace Database\Factories;
+
+use App\Models\ChariotProdPetrisseur;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
+
+class ChariotProdPetrisseurFactory extends Factory
+{
+    protected $model = ChariotProdPetrisseur::class;
+
+    public function definition(): array
+    {
+        return [
         ];
     }
 }

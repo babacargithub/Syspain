@@ -19,6 +19,7 @@ class CreateClientsTable extends Migration
             $table->string('prenom');
             $table->string('nom');
             $table->string('telephone');
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
             $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
         });

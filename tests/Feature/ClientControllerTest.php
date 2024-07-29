@@ -12,7 +12,7 @@ class ClientControllerTest extends TestCase
 
     public function test_index_returns_all_clients()
     {
-        Client::factory()->count(3)->create();
+        Client::factory()->for($this->boulangerie)->count(3)->create();
 
         $response = $this->getJson('/api/clients');
 
@@ -26,6 +26,7 @@ class ClientControllerTest extends TestCase
             'nom' => 'John',
             'prenom' => 'Doe',
             'telephone' => '123456789',
+
         ];
 
         $response = $this->postJson('/api/clients', $data);
@@ -36,7 +37,7 @@ class ClientControllerTest extends TestCase
 
     public function test_show_returns_client_by_id()
     {
-        $client = Client::factory()->create();
+        $client = Client::factory()->for($this->boulangerie)->create();
 
         $response = $this->getJson('/api/clients/' . $client->id);
 
@@ -46,7 +47,7 @@ class ClientControllerTest extends TestCase
 
     public function test_update_modifies_existing_client()
     {
-        $client = Client::factory()->create();
+        $client = Client::factory()->for($this->boulangerie)->create();
         $data = [
             'nom' => 'Jane',
             'prenom' => 'Doe',
@@ -61,7 +62,7 @@ class ClientControllerTest extends TestCase
 
     public function test_destroy_deletes_client()
     {
-        $client = Client::factory()->create();
+        $client = Client::factory()->for($this->boulangerie)->create();
 
         $response = $this->deleteJson('/api/clients/' . $client->id);
 
@@ -71,7 +72,7 @@ class ClientControllerTest extends TestCase
 
     public function test_toggle_changes_active_status()
     {
-        $client = Client::factory()->create(['is_active' => true]);
+        $client = Client::factory()->for($this->boulangerie)->create(['is_active' => true]);
 
         $response = $this->putJson('/api/clients/' . $client->id . '/toggle');
 

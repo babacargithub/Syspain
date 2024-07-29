@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Caisse;
 use App\Models\ProdPatisserie;
 use App\Models\ArticleProdPatisserie;
 use App\Models\Boulangerie;
+use App\Models\Recette;
+use App\Models\TypeRecette;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +23,14 @@ class ProdPatisserieController extends Controller
     public function index()
     {
         $prodPatisseries = ProdPatisserie::orderByDesc('date_production')
+            ->get();
+        return response()->json($prodPatisseries);
+    }
+    // get prod patisserie of a specific date
+    public function getProdPatisserieByDate(Request $request, $date)
+    {
+        $prodPatisseries = ProdPatisserie::where('date_production', $date)
+            ->orderByDesc('created_at')
             ->get();
         return response()->json($prodPatisseries);
     }
@@ -193,6 +205,40 @@ class ProdPatisserieController extends Controller
     public function deleteArticle(ArticleProdPatisserie $articleProdPatisserie){
         $articleProdPatisserie->delete();
         return response()->json(null, 204);
+    }
+
+    public function encaisserProdPatisserie(Request $request, ProdPatisserie $prodPatisserie)
+    {
+        $data = $request->validate([
+            'montant' => 'required|numeric'
+        ]);
+        // create recettes
+        DB::transaction(function () use ($data, $prodPatisserie) {
+            $recette = new Recette();
+            $recette->montant = $data['montant'];
+            $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+            //TODO get type recette id
+            $typeRecette = TypeRecette::firstOrFail();
+            $recette->typeRecette()->associate($typeRecette);
+            Carbon::setLocale('fr');
+
+// Create a Carbon instance for the desired date
+            $date_formatted = Carbon::parse($prodPatisserie->date_production);
+
+// Format the date to the desired format
+            $formattedDate = $date_formatted->translatedFormat('l j F Y');
+            $recette->commentaire = "Encaissement de la production patisserie du " . $formattedDate." du " .
+                $prodPatisserie->periode;
+            $caisse = Caisse::requireCaisseOfLoggedInUser();
+            $recette->caisse()->associate($caisse);
+            $recette->save();
+            $caisse->augmenterSolde($data['montant'],$prodPatisserie->toArray());
+            $prodPatisserie->verse = true;
+            $prodPatisserie->save();
+        });
+        return response()->json(['message' => 'Encaissement effectué avec succès'], 200);
+
+
     }
 
 }

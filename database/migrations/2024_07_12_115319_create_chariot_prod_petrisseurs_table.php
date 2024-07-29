@@ -18,6 +18,7 @@ return new class extends Migration
             $table->id();
             $table->foreignIdFor(ProductionPetrisseur::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->foreignIdFor(Chariot::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->integer('nombre');
             $table->timestamps();
         });
     }

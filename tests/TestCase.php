@@ -15,7 +15,7 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         $this->artisan('migrate');
-        $this->boulangerie = Boulangerie::factory()::mockActiveBoulangerie();
+        $this->boulangerie = Boulangerie::factory()->create();
         $user = User::factory()->create();
         $this->user = $user;
         $this->actingAs($user);

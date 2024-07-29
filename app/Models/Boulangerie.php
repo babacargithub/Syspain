@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Boulangerie extends Model
 {
     use HasFactory;
-    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client"];
+    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client","boulangerie_id"];
 
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {

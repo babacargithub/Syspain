@@ -16,9 +16,12 @@ class ProdPatisserie extends Model
     protected $fillable = [
         'date_production',
         'boulangerie_id',
+        'verse',
         'periode'
     ];
-
+    protected $casts = [
+        'verse' => 'boolean'
+    ];
     public function boulangerie(): BelongsTo
     {
         return $this->belongsTo(Boulangerie::class);
@@ -30,10 +33,12 @@ class ProdPatisserie extends Model
         return $this->hasMany(ArticleProdPatisserie::class);
     }
 
+    /** @noinspection PhpUnused */
     public function getNombreAVerserAttribute(): int
     {
         return $this->articles->sum('nombre_verser');
     }
+    /** @noinspection PhpUnused */
     public function getMontantAVerserAttribute(): int
     {
         return $this->articles->sum('montant_a_verser');

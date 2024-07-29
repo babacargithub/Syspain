@@ -95,6 +95,28 @@ class VersementController extends Controller
 
         $caisse = Caisse::find($data['caisse_id']);
         $caisse->augmenterSolde($montant_verse);
+
+            $identifier = '';
+
+            if ($versement->isForLivreur()) {
+                $identifier = $versement->livreur->identifier();
+            } elseif ($versement->isForClient()) {
+                $identifier = $versement->client->identifier();
+            } elseif ($versement->isForBoutique()) {
+                $identifier = $versement->boutique->identifier();
+            } else if ($versement->isForAbonnement()) {
+                $identifier = $versement->abonnement->identifier();
+            }
+
+// Create the recette with the determined identifier
+           $caisse->recettes()->create([
+                'montant' => $montant_verse,
+                // TODO get type recette id later
+                'type_recette_id' => 1,
+                'commentaire' => 'Versement de ' . $identifier,
+                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            ]);
+
         });
 
 

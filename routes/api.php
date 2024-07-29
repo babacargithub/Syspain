@@ -12,6 +12,7 @@ use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
+use App\Models\Caisse;
 use App\Models\Chariot;
 use App\Models\Depense;
 use App\Models\TypeDepense;
@@ -81,13 +82,21 @@ Route::get('types_depenses_recettes',function (){
 Route::resource('articles', ArticleController::class);
 Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
     'deleteArticle']);
+Route::post('production_patisseries/{prodPatisserie}/encaisser', [ProdPatisserieController::class, 'encaisserProdPatisserie']);
 Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
 Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
+Route::get('production_patisseries/date/{date}', [ProdPatisserieController::class, 'getProdPatisserieByDate']);
 Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieController::class, 'updateArticles']);
 
 Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
     'production_patisseries' => 'prodPatisserie',
 ]);
+Route::get('caisse',function (){
+
+    $caisse = Caisse::requireCaisseOfLoggedInUser();
+    return response()->json(["solde" => $caisse->solde]);
+
+});
 
 
 

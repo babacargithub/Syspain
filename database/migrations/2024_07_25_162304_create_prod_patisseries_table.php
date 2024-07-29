@@ -21,6 +21,7 @@ class CreateProdPatisseriesTable extends Migration
                 ->cascadeOnDelete()
                 ->cascadeOnUpdate();
             $table->unique(['date_production','periode', 'boulangerie_id']);
+            $table->boolean('verse')->default(false);
             $table->timestamps();
         });
     }
