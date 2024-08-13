@@ -35,7 +35,8 @@ class ProductionPanetier extends Model
         'casse',
         'mange',
         'periode',
-        'boulangerie_id'
+        'boulangerie_id',
+        'production_petrisseur_id'
     ];
 
     public function boulangerie(): BelongsTo
@@ -95,6 +96,11 @@ class ProductionPanetier extends Model
     public function getCorrespondingProdPetrisseur() : ?ProductionPetrisseur
     {
         return ProductionPetrisseur::ofCurrentBoulangerie()->whereDateProduction($this->date_production)->first();
+
+    }
+    public function prodPetrisseur(): BelongsTo
+    {
+        return $this->belongsTo(ProductionPetrisseur::class);
 
     }
     protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];

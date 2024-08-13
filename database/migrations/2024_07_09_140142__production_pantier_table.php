@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Boulangerie;
+use App\Models\ProductionPetrisseur;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -29,6 +30,7 @@ return new class extends Migration
             $table->enum('periode', ['matin', 'soir']);
             $table->unique(['boulangerie_id','date_production', 'periode'], 'unique_production_panetier');
             $table->integer('prix_pain_livreur')->default(150);
+            $table->foreignIdFor(ProductionPetrisseur::class)->nullable()->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->timestamps();
         });
     }

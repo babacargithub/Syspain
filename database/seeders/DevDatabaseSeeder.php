@@ -19,6 +19,7 @@ use App\Models\Livreur;
 use App\Models\MouveIntrant;
 use App\Models\ProdPatisserie;
 use App\Models\Recette;
+use App\Models\StockIntrant;
 use App\Models\TypeDepense;
 use App\Models\TypeRecette;
 use App\Models\User;
@@ -97,7 +98,15 @@ class DevDatabaseSeeder extends Seeder
             ->for($boulangerie)->create();
 
         Intrant::factory()->count(30)->for($boulangerie)->create();
-        Intrant::first()->stock->mouvements()->saveMany(MouveIntrant::factory()->count(20)
+        $intrant = Intrant::first();
+        $intrant->stock()->create([
+            'nom' => 'Stock '.$intrant->nom,
+            'code_bar' => rand(100000, 999999),
+            "quantite" => 1000,
+            "prix_achat" => 1000,
+            "boulangerie_id" => $boulangerie->id,
+        ]);
+        Intrant::with('stock')->firstOrFail()->stock->mouvements()->saveMany(MouveIntrant::factory()->count(20)
             ->for(Intrant::first()->stock)
             ->for($boulangerie)
             ->make());

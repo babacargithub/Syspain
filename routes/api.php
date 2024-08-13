@@ -58,7 +58,7 @@ Route::get('chariots',function (){
         return [
             'id' => $chariot->id,
             'nom' => $chariot->nom,
-            "nombre" => $chariot->nombre_pain,
+            "nombre_pain" => $chariot->nombre_pain,
         ];
     }));
 

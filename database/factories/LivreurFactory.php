@@ -16,7 +16,7 @@ class LivreurFactory extends Factory
         $definition = [
             'prenom' => $this->faker->firstName(),
             'nom' => $this->faker->lastName(),
-            'telephone' => $this->faker->phoneNumber(),
+            'telephone' => '77' . $this->faker->unique()->randomNumber(7),
         ];
         if (app()->environment('testing')) {
             $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;

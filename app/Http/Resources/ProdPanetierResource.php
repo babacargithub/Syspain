@@ -19,8 +19,8 @@ class ProdPanetierResource extends JsonResource
         /** @var $this ProductionPanetier */
         $definition = [
             "id" => $this->id,
-            "nombre_petrisseur" => $this->getCorrespondingProdPetrisseur() !== null ?
-                $this->getCorrespondingProdPetrisseur()->total_pain : 0,
+            "nombre_petrisseur" => $this->prodPetrisseur !== null ?
+                $this->prodPetrisseur->total_pain : 0,
             "date_production" => $this->date_production,
             "identifier" => $this->identifier(),
             "nombre_pain" => $this->nombre_pain,
