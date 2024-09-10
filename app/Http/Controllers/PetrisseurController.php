@@ -14,7 +14,10 @@ class PetrisseurController extends Controller
     // enregistre production petrisseur
     public function index()
     {
-        $productions = ProductionPetrisseur::ofCurrentBoulangerie()->orderByDesc('date_production')->limit(30)->get();
+        $productions = ProductionPetrisseur::ofCurrentBoulangerie()
+            ->with('prodPanetier')
+            ->orderByDesc('date_production')->limit(30)
+            ->get();
         return response()->json($productions);
     }
     public function productionDuJour($date)

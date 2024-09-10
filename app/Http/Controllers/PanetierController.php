@@ -42,6 +42,7 @@ class PanetierController extends Controller
             'chariots' => '|required|array',
             'periode' => 'required|in:matin,soir',
             'mange' => 'required|integer',
+            'production_petrisseur_id' => 'required|integer|exists:production_petrisseurs,id',
         ]);
         $productionPanetier = new ProductionPanetier($data);
         $productionPanetier->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());

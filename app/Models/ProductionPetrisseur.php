@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property mixed $date_production
@@ -64,6 +65,12 @@ class ProductionPetrisseur extends Model
         })->sum();
     }
     protected $appends = ['total_pain','rendement','nombre_chariot'];
+
+    public function prodPanetier() : HasOne
+    {
+        return $this->hasOne(ProductionPanetier::class);
+
+    }
 
 
 

@@ -425,6 +425,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ChariotProdPetrisseur extends Model
 {
@@ -434,6 +435,14 @@ class ChariotProdPetrisseur extends Model
         'production_petrisseur_id',
         'nombre'
     ];
+    public function chariot(): BelongsTo
+    {
+        return $this->belongsTo(Chariot::class);
+    }
+    public function productionPetrisseur(): BelongsTo
+    {
+        return $this->belongsTo(ProductionPetrisseur::class);
+    }
 }
 
 
@@ -898,7 +907,8 @@ class ProductionPanetier extends Model
         'casse',
         'mange',
         'periode',
-        'boulangerie_id'
+        'boulangerie_id',
+        'production_petrisseur_id'
     ];
 
     public function boulangerie(): BelongsTo
@@ -927,7 +937,7 @@ class ProductionPanetier extends Model
     }
     public function getNombrePainEntregistreAttribute()
     {
-        $nombre_pain_plat = 10; // TODO dynamise this
+        $nombre_pain_plat = $this->nombre_plat; // TODO dynamise this
         return $this->chariots()
                 ->selectRaw('SUM(chariot_prod_panetiers.nombre * chariots.nombre_pain) as total_nombre_pain')
                 ->join('chariots', 'chariots.id', '=', 'chariot_prod_panetiers.chariot_id')
@@ -958,6 +968,11 @@ class ProductionPanetier extends Model
     public function getCorrespondingProdPetrisseur() : ?ProductionPetrisseur
     {
         return ProductionPetrisseur::ofCurrentBoulangerie()->whereDateProduction($this->date_production)->first();
+
+    }
+    public function prodPetrisseur(): BelongsTo
+    {
+        return $this->belongsTo(ProductionPetrisseur::class);
 
     }
     protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];
@@ -998,8 +1013,16 @@ class ProductionPetrisseur extends Model
 
     public function totalPain() : int
     {
-        // TODO check again later
-        return ($this->rendement * $this->nombre_sac);
+
+        $chariotsNombrePainMultiplied = $this->chariots->map(function ($chariot) {
+            return $chariot->nombre * $chariot->chariot->nombre_pain;
+        });
+        $totalPain = $chariotsNombrePainMultiplied->sum();
+        // TODO check if has moitié
+        if ($this->nombre_pain >10000000000000) {
+            $totalPain += $this->nombre_pain;
+        }
+        return $totalPain;
 
     }
     public function getTotalPainAttribute(): int
@@ -1007,7 +1030,22 @@ class ProductionPetrisseur extends Model
         return $this->totalPain();
     }
 
-    protected $appends = ['total_pain'];
+    public function getRendementAttribute(): float
+    {
+        // get total pain divided by nombre sac without floating point
+        try {
+            return round($this->totalPain / $this->nombre_sac);
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+    public function getNombreChariotAttribute(): int
+    {
+        return $this->chariots->map(function ($chariot) {
+            return $chariot->nombre;
+        })->sum();
+    }
+    protected $appends = ['total_pain','rendement','nombre_chariot'];
 
 
 
@@ -1578,10 +1616,51 @@ class CreateLivreursTable extends Migration
 }
 
 
+2024_07_09_140141_create_production_petrisseurs_table.php
+<?php
+
+use App\Models\Boulangerie;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('production_petrisseurs', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Boulangerie::class);
+            $table->date('date_production')->nullable(false)
+                ->unique()
+                ->default(today()->toDateString());
+            $table->integer('nombre_sac');
+            $table->integer('nombre_chariot')->default(0);
+            $table->integer('nombre_plat')->default(0);
+            $table->integer('nombre_pain')->default(0);
+            $table->integer('rendement')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('production_petrisseurs');
+    }
+};
+
+
 2024_07_09_140142__production_pantier_table.php
 <?php
 
 use App\Models\Boulangerie;
+use App\Models\ProductionPetrisseur;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -1610,6 +1689,7 @@ return new class extends Migration
             $table->enum('periode', ['matin', 'soir']);
             $table->unique(['boulangerie_id','date_production', 'periode'], 'unique_production_panetier');
             $table->integer('prix_pain_livreur')->default(150);
+            $table->foreignIdFor(ProductionPetrisseur::class)->nullable()->constrained()->cascadeOnDelete()->cascadeOnUpdate();
             $table->timestamps();
         });
     }
@@ -1947,46 +2027,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('stock_intrants');
-    }
-};
-
-
-2024_07_09_172555_create_production_petrisseurs_table.php
-<?php
-
-use App\Models\Boulangerie;
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
-    {
-        Schema::create('production_petrisseurs', function (Blueprint $table) {
-            $table->id();
-            $table->foreignIdFor(Boulangerie::class);
-            $table->date('date_production')->nullable(false)
-                ->unique()
-                ->default(today()->toDateString());
-            $table->integer('nombre_sac');
-            $table->integer('nombre_chariot')->default(0);
-            $table->integer('nombre_plat')->default(0);
-            $table->integer('nombre_pain')->default(0);
-            $table->integer('rendement')->default(0);
-            $table->timestamps();
-        });
-    }
-
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('production_petrisseurs');
     }
 };
 
@@ -2631,7 +2671,7 @@ Route::get('chariots',function (){
         return [
             'id' => $chariot->id,
             'nom' => $chariot->nom,
-            "nombre" => $chariot->nombre_pain,
+            "nombre_pain" => $chariot->nombre_pain,
         ];
     }));
 
@@ -2664,6 +2704,7 @@ Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieCo
 Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
     'production_patisseries' => 'prodPatisserie',
 ]);
+
 Route::get('caisse',function (){
 
     $caisse = Caisse::requireCaisseOfLoggedInUser();
@@ -2803,8 +2844,8 @@ class ProdPanetierResource extends JsonResource
         /** @var $this ProductionPanetier */
         $definition = [
             "id" => $this->id,
-            "nombre_petrisseur" => $this->getCorrespondingProdPetrisseur() !== null ?
-                $this->getCorrespondingProdPetrisseur()->total_pain : 0,
+            "nombre_petrisseur" => $this->prodPetrisseur !== null ?
+                $this->prodPetrisseur->total_pain : 0,
             "date_production" => $this->date_production,
             "identifier" => $this->identifier(),
             "nombre_pain" => $this->nombre_pain,
@@ -3749,6 +3790,7 @@ class PanetierController extends Controller
             'chariots' => '|required|array',
             'periode' => 'required|in:matin,soir',
             'mange' => 'required|integer',
+            'production_petrisseur_id' => 'required|integer|exists:production_petrisseurs,id',
         ]);
         $productionPanetier = new ProductionPanetier($data);
         $productionPanetier->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
@@ -3829,8 +3871,29 @@ class PetrisseurController extends Controller
     public function productionDuJour($date)
     {
         $productions = ProductionPetrisseur::ofCurrentBoulangerie()
+            ->with('chariots')
             ->where('date_production', $date)->get();
-        return response()->json($productions);
+
+        return response()->json($productions->map(function (ProductionPetrisseur $petrisseur){
+            return [
+                'id' => $petrisseur->id,
+                'date_production' => $petrisseur->date_production,
+                'nombre_chariot' => $petrisseur->nombre_chariot,
+                'nombre_sac' => $petrisseur->nombre_sac,
+                'nombre_plat' => $petrisseur->nombre_plat,
+                'nombre_pain' => $petrisseur->nombre_pain,
+                'rendement' => $petrisseur->rendement,
+                'chariots' => $petrisseur->chariots->map(function (ChariotProdPetrisseur $chariot){
+                    return [
+                        'id' => $chariot->id,
+                        'chariot_id' => $chariot->chariot_id,
+                        'nombre' => $chariot->nombre,
+                        'nom_chariot' => $chariot->chariot->nom,
+                        'nombre_pain' => $chariot->chariot->nombre_pain,
+                    ];
+                })
+            ];
+        }));
     }
     public function store(Request $request)
     {
@@ -3883,9 +3946,15 @@ class PetrisseurController extends Controller
             'nombre_plat'  => 'integer',
             'rendement'  => 'integer',
             'nombre_pain'  => 'integer',
+            'chariots' => 'array',
         ]);
 
         $petrisseur->update($data);
+       foreach ($data['chariots'] as $chariot) {
+            $chariotProd = ChariotProdPetrisseur::whereChariotId($chariot['chariot_id'])->whereProductionPetrisseurId($petrisseur->id)->first();
+           $chariotProd?->update($chariot);
+       }
+        $petrisseur->save();
         return response()->json($petrisseur);
     }
     public function destroy(ProductionPetrisseur $petrisseur)
@@ -5147,6 +5216,7 @@ namespace Database\Factories;
 
 use App\Models\Boulangerie;
 use App\Models\Intrant;
+use App\Models\StockIntrant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Carbon;
 
@@ -5163,14 +5233,7 @@ class IntrantFactory extends Factory
     public function configure(): IntrantFactory
     {
         return $this->afterCreating(function (Intrant $intrant) {
-            $intrant->stock()->create([
-                "boulangerie_id" => $intrant->boulangerie_id,
-                "quantite" => 100,
-                "code_bar" => $this->faker->unique()->randomNumber(9),
-                "prix_achat" => 0,
-                "nom" => "Stock de ".$intrant->nom,
 
-            ]);
         });
     }
 }
@@ -5195,7 +5258,7 @@ class LivreurFactory extends Factory
         $definition = [
             'prenom' => $this->faker->firstName(),
             'nom' => $this->faker->lastName(),
-            'telephone' => $this->faker->phoneNumber(),
+            'telephone' => '77' . $this->faker->unique()->randomNumber(7),
         ];
         if (app()->environment('testing')) {
             $definition["boulangerie_id"] =  Boulangerie::factory()::mockActiveBoulangerie()->id;

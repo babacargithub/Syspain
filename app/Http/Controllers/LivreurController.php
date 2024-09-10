@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
+use App\Models\DistribPanetier;
+use App\Models\Versement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\Livreur;
@@ -90,5 +92,39 @@ class LivreurController extends Controller
 
         $livreur->update(['is_active' => $is_active]);
         return response()->json(['message' => 'Livreur disabled successfully']);
+    }
+
+    public function historique(Livreur $livreur)
+    {
+        // Get the distribPanetiers related to the current livreur
+        $distribPanetiers = DistribPanetier::select([
+            'nombre_pain','created_at','bonus'
+        ])->with('productionPanetier')
+            ->where('livreur_id', $livreur->id)
+            ->get();
+
+        // Get the versements related to the current livreur
+        $versements = Versement::select(['montant_verse','date_versement','nombre_retour'])->where('livreur_id',
+            $livreur->id)
+            ->get();
+
+        // Calculate the total pain taken
+        $totalPainTaken = $distribPanetiers->sum('nombre_pain');
+
+        // Calculate the total amount of versements
+        $totalVersements = $versements->sum('montant_verse');
+
+        // Calculate solde reliquat and solde pain
+        $soldeReliquat = $livreur->compteLivreur->solde_reliquat;
+        $soldePain = $livreur->compteLivreur->solde_pain;
+
+        return response()->json([
+            'distribPanetiers' => $distribPanetiers,
+            'versements' => $versements,
+            'totalPainTaken' => $totalPainTaken,
+            'totalVersements' => $totalVersements,
+            'soldeReliquat' => $soldeReliquat,
+            'soldePain' => $soldePain,
+        ]);
     }
 }

@@ -65,7 +65,7 @@ class ProductionPanetier extends Model
     }
     public function getNombrePainEntregistreAttribute()
     {
-        $nombre_pain_plat = 10; // TODO dynamise this
+        $nombre_pain_plat = $this->nombre_plat; // TODO dynamise this
         return $this->chariots()
                 ->selectRaw('SUM(chariot_prod_panetiers.nombre * chariots.nombre_pain) as total_nombre_pain')
                 ->join('chariots', 'chariots.id', '=', 'chariot_prod_panetiers.chariot_id')

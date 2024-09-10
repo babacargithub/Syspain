@@ -38,6 +38,8 @@ Route::resource('distribution_panetiers', DistribPanetierController::class,[
 Route::get('versements/livreurs', [VersementController::class, 'versementsLivreurs'])->name('versements.livreurs');
 // versements d'une date
 Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
+Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
+
 Route::put('livreurs/{livreur}/activate/{is_active}', [LivreurController::class, 'disable'])->name('livreurs.activate');
 Route::resource('livreurs', LivreurController::class);
 Route::resource('versements', VersementController::class);
@@ -91,6 +93,7 @@ Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieCo
 Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
     'production_patisseries' => 'prodPatisserie',
 ]);
+
 Route::get('caisse',function (){
 
     $caisse = Caisse::requireCaisseOfLoggedInUser();
