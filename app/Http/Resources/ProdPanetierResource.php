@@ -19,8 +19,8 @@ class ProdPanetierResource extends JsonResource
         /** @var $this ProductionPanetier */
         $definition = [
             "id" => $this->id,
-            "nombre_petrisseur" => $this->prodPetrisseur !== null ?
-                $this->prodPetrisseur->total_pain : 0,
+            "nombre_petrisseur" => $this->productionPetrisseur() !== null ?
+                $this->productionPetrisseur->totalPain : null,
             "date_production" => $this->date_production,
             "identifier" => $this->identifier(),
             "nombre_pain" => $this->nombre_pain,
@@ -42,7 +42,7 @@ class ProdPanetierResource extends JsonResource
             }),
             "mange" => $this->mange,
         ];
-        $definition['resultat'] = $definition['nombre_petrisseur'] - $definition['nombre_pain_entregistre'];
+        $definition['resultat'] = $definition['nombre_petrisseur'] - $definition['total_pain_distribue'];
         return $definition;
     }
 }

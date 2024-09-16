@@ -79,6 +79,7 @@ class PanetierController extends Controller
     public function show(ProductionPanetier $productionPanetier)
     {
         $productionPanetier->load('chariots');
+        $productionPanetier->load('productionPetrisseur');
 
         $livreurs = $productionPanetier->distribPanetiers()->whereNotNull('livreur_id')->get();
         $clients = $productionPanetier->distribPanetiers()->whereNotNull('client_id')->get();

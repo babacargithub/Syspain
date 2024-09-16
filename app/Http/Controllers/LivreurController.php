@@ -124,6 +124,7 @@ class LivreurController extends Controller
             'totalPainTaken' => $totalPainTaken,
             'totalVersements' => $totalVersements,
             'soldeReliquat' => $soldeReliquat,
+            "dette"=> $soldePain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur,
             'soldePain' => $soldePain,
         ]);
     }

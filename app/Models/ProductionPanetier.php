@@ -60,9 +60,12 @@ class ProductionPanetier extends Model
     }
     public function getTotalPainPetrisseurProduitAttribute()
     {
-        return ProductionPetrisseur::whereDateProduction($this->date_production)->sum('nombre_pain');
+        $prod = ProductionPetrisseur::whereId($this->production_petrisseur_id)->first();
+        return $prod !== null ? $prod->totalPain : 0;
 
     }
+
+    /** @noinspection UnknownColumnInspection */
     public function getNombrePainEntregistreAttribute()
     {
         $nombre_pain_plat = $this->nombre_plat; // TODO dynamise this
@@ -70,7 +73,7 @@ class ProductionPanetier extends Model
                 ->selectRaw('SUM(chariot_prod_panetiers.nombre * chariots.nombre_pain) as total_nombre_pain')
                 ->join('chariots', 'chariots.id', '=', 'chariot_prod_panetiers.chariot_id')
                 ->where('chariot_prod_panetiers.production_panetier_id', $this->id)
-                ->value('total_nombre_pain') + ($this->nombre_plat * $nombre_pain_plat);
+                ->value('total_nombre_pain')+ $nombre_pain_plat;
     }
     public  function getTotalPainDistribueAttribute()
     {
@@ -93,15 +96,16 @@ class ProductionPanetier extends Model
         }
 
     }
-    public function getCorrespondingProdPetrisseur() : ?ProductionPetrisseur
-    {
-        return ProductionPetrisseur::ofCurrentBoulangerie()->whereDateProduction($this->date_production)->first();
 
-    }
-    public function prodPetrisseur(): BelongsTo
+    public function productionPetrisseur(): BelongsTo
     {
         return $this->belongsTo(ProductionPetrisseur::class);
 
+    }
+    // get nombre pain attribute from total pain petrisseur produit
+    public function getNombrePainAttribute()
+    {
+        return $this->getTotalPainPetrisseurProduitAttribute();
     }
     protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];
 }

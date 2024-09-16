@@ -28,6 +28,7 @@ Route::resource('panetiers', PanetierController::class)
         // customise the store route
     ]);
 Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
+Route::get('distribution_panetiers/{productionPanetier}/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
 Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
 Route::resource('distribution_panetiers', DistribPanetierController::class,[
     'only' => ['index','update','destroy','show']
