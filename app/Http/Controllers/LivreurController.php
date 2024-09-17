@@ -18,7 +18,21 @@ class LivreurController extends Controller
     public function index()
     {
         $livreurs = Livreur::whereBoulangerieId(Boulangerie::requireBoulangerieOfLoggedInUser()->id)->whereIsActive
-        (true)->get();
+        (true)->get()->map(function ($livreur) {
+            return [
+                'id' => $livreur->id,
+                'prenom' => $livreur->prenom,
+                'nom' => $livreur->nom,
+                'telephone' => $livreur->telephone,
+                'prix_pain' => $livreur->prix_pain,
+                'is_active' => (bool)$livreur->is_active,
+                'identifier' => $livreur->identifier(),
+                'solde_reliquat' => $livreur->compteLivreur->solde_reliquat,
+                'solde_pain' => $livreur->compteLivreur->solde_pain,
+                'dette' => $livreur->compteLivreur->solde_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur,
+
+            ];
+        });
         return response()->json($livreurs);
     }
 

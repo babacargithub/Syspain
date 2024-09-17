@@ -42,26 +42,30 @@ class DistribPanetierController extends Controller
         // $data['nombre_pain'] is the sum of livreurs, clients, abonnements, and boutiques in request
         // we must first sum the existing distribPanetiers  in order to take into account the update
         // of the distribPanetier
-        $totalPainOfExistingLivreurs = $productionPanetier->distribPanetiers()
-                ->whereIn('livreur_id',collect($data['livreurs'])
-                ->pluck('livreur_id')->toArray())
-                ->sum('nombre_pain');
 
-        $data['nombre_pain'] = collect($data['livreurs'])->sum('nombre_pain') +
+        // add the 4 values
+        $totalPainOfExisting = $productionPanetier->distribPanetiers()
+            ->where(function($query) use ($data) {
+                $query->whereIn('livreur_id', collect($data['livreurs'])->pluck('livreur_id')->toArray())
+                    ->orWhereIn('client_id', collect($data['clients'])->pluck('client_id')->toArray())
+                    ->orWhereIn('abonnement_id', collect($data['abonnements'])->pluck('abonnement_id')->toArray())
+                    ->orWhereIn('boutique_id', collect($data['boutiques'])->pluck('boutique_id')->toArray());
+            })->sum('nombre_pain');
+//
+
+        $data['nombre_pain'] =
+            collect($data['livreurs'])->sum('nombre_pain') +
             collect($data['clients'])->sum('nombre_pain') +
             collect($data['abonnements'])->sum('nombre_pain') +
-            collect($data['boutiques'])->sum('nombre_pain') - $totalPainOfExistingLivreurs;
-
+            collect($data['boutiques'])->sum('nombre_pain') - $totalPainOfExisting;
         // loop through livreurs and create a distribPanetier for each
 
-        $productionPanetier->nombre_pain = $productionPanetier->nombre_pain_entregistre;
         if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain produit"], 422);
         } else if ($data['nombre_pain'] < 0) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être négatif"], 422);
-        } else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain -
-                $productionPanetier->total_pain_distribue)) {
-            return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain restant"], 422);
+        } else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain_entregistre - $totalPainOfExisting)) {
+            return response()->json(["message" => "Pour le total de pain que vous voulez enregistrer le nombre de pain restant est insuffisant !"], 422);
         }
         // start transaction before saving operations
         DB::transaction(function () use ($productionPanetier, $data) {

@@ -235,4 +235,47 @@ class VersementController extends Controller
             'boutiques' => VersementResource::collection($boutiques),
         ]);
     }
+    public function destinations()
+    {
+        $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
+        $livreurs = $boulangerie->livreurs()->where('is_active',true)->get();
+        $clients = $boulangerie->clients;
+        $abonnements = $boulangerie->abonnements;
+        $boutiques = $boulangerie->boutiques;
+        return response()->json([
+            'livreurs' => $livreurs->map(function (Livreur $livreur){
+                return [
+                    'id' => $livreur->id,
+                    'nom' => $livreur->identifier(),
+                    'solde_pain' => $livreur->compteLivreur->solde_pain,
+                    'solde_reliquat' => $livreur->compteLivreur->solde_reliquat,
+                    'dette' => $livreur->compteLivreur->dette,
+                ];
+            }),
+            'clients' => $clients->map(function (Client $client){
+                return [
+                    'id' => $client->id,
+                    'nom' => $client->nom,
+                    'solde_pain' => $client->compteClient->solde_pain,
+                    'dette' => $client->compteClient->dette,
+                ];
+            }),
+            'abonnements' => $abonnements->map(function (Abonnement $abonnement){
+                return [
+                    'id' => $abonnement->id,
+                    'nom' => $abonnement->identifier(),
+                    'solde_pain' => $abonnement->solde_pain,
+                    'dette' => $abonnement->dette,
+                ];
+            }),
+            'boutiques' => $boutiques->map(function (Boutique $boutique){
+                return [
+                    'id' => $boutique->id,
+                    'nom' => $boutique->identifier(),
+                    'solde_pain' => $boutique->solde_pain,
+                ];
+            }),
+        ]);
+
+    }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DepenseController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
+use App\Http\Middleware\AdminMiddleware;
 use App\Models\Caisse;
 use App\Models\Chariot;
 use App\Models\Depense;
@@ -37,6 +39,7 @@ Route::resource('distribution_panetiers', DistribPanetierController::class,[
     // customise the store route
 ]);
 Route::get('versements/livreurs', [VersementController::class, 'versementsLivreurs'])->name('versements.livreurs');
+Route::get('versements/destinations', [VersementController::class, 'destinations'])->name('versements.destinations');
 // versements d'une date
 Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
 Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
@@ -101,6 +104,13 @@ Route::get('caisse',function (){
     return response()->json(["solde" => $caisse->solde]);
 
 });
+
+// admin section routes with 'admin' prefix and protected by admin middleware
+//TODO implement the admin middleware later
+Route::prefix('admin')->group(function () {
+    Route::get('boulangeries', [AdminController::class, 'boulangeries']);
+    Route::get('boulangeries/{boulangerie}/dashboard', [AdminController::class, 'dashboard']);
+})->middleware(AdminMiddleware::class);
 
 
 

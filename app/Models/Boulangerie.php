@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Boulangerie extends Model
 {
@@ -42,6 +43,11 @@ class Boulangerie extends Model
     {
         return $this->hasMany(Boutique::class);
     }
+    public function abonnements(): HasManyThrough
+    {
+        return $this->hasManyThrough(Abonnement::class, Client::class);
+
+    }
     public function livreurs(): HasMany
     {
         return $this->hasMany(Livreur::class);
@@ -63,10 +69,7 @@ class Boulangerie extends Model
     {
         return $this->hasMany(Recette::class);
     }
-    public function abonnements(): HasMany
-    {
-        return $this->hasMany(Abonnement::class);
-    }
+
 
 
 }
