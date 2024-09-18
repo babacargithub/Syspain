@@ -72,4 +72,21 @@ class Versement extends Model
         return $this->abonnement_id !== null;
     }
 
+    public function identifier(): string
+    {
+        if ($this->isForLivreur()) {
+            return $this->livreur->identifier();
+        }
+        if ($this->isForClient()) {
+            return $this->client->identifier();
+        }
+        if ($this->isForBoutique()) {
+            return $this->boutique->identifier();
+        }
+        if ($this->isForAbonnement()) {
+            return $this->abonnement->identifier();
+        }
+        return 'Versement';
+    }
+
 }

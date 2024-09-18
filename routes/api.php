@@ -42,7 +42,10 @@ Route::get('versements/livreurs', [VersementController::class, 'versementsLivreu
 Route::get('versements/destinations', [VersementController::class, 'destinations'])->name('versements.destinations');
 // versements d'une date
 Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
+
+// ============= SECTION LIVREURS ====================
 Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
+Route::get('/livreurs/{livreur}/distribution_panetiers', [LivreurController::class, 'getDistribPanetiersOfLivreurs']);
 
 Route::put('livreurs/{livreur}/activate/{is_active}', [LivreurController::class, 'disable'])->name('livreurs.activate');
 Route::resource('livreurs', LivreurController::class);

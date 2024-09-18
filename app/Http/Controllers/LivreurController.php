@@ -29,7 +29,7 @@ class LivreurController extends Controller
                 'identifier' => $livreur->identifier(),
                 'solde_reliquat' => $livreur->compteLivreur->solde_reliquat,
                 'solde_pain' => $livreur->compteLivreur->solde_pain,
-                'dette' => $livreur->compteLivreur->solde_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur,
+                'dette' => $livreur->compteLivreur->dette,
 
             ];
         });
@@ -141,5 +141,31 @@ class LivreurController extends Controller
             "dette"=> $soldePain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur,
             'soldePain' => $soldePain,
         ]);
+    }
+
+    // get list of 30 distrib_panetiers of livreurs
+    public function getDistribPanetiersOfLivreurs(Livreur $livreur)
+    {
+        $distribPanetiers = DistribPanetier::where('livreur_id', $livreur->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(30)
+            ->get()->map(function ($distribPanetier) use ($livreur) {
+                return [
+                    'id' => $distribPanetier->id,
+                    'nombre_pain' => $distribPanetier->nombre_pain,
+                    "nombre_retour" => $distribPanetier->nombre_retour,
+                    "valeur_pain" => $distribPanetier->valeurPain(),
+                    'prix_pain' => $livreur->prix_pain,
+                    'created_at' => $distribPanetier->created_at,
+                    'bonus' => $distribPanetier->bonus,
+                    'verse'=> $distribPanetier->versement_id !== null,
+                    'date_production_panetier' => $distribPanetier->productionPanetier->date_production,
+                    'periode' => $distribPanetier->productionPanetier->periode,
+                    "identifier"=>"Lot pains du ".$distribPanetier->productionPanetier->identifier(),
+                    'production_panetier' => $distribPanetier->productionPanetier->id,
+                ];
+            });
+        return response()->json($distribPanetiers);
+
     }
 }

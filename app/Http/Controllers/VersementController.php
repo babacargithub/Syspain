@@ -9,6 +9,7 @@ use App\Models\Boutique;
 use App\Models\Caisse;
 use App\Models\Client;
 use App\Models\CompteLivreur;
+use App\Models\DistribPanetier;
 use App\Models\Livreur;
 use App\Models\Versement;
 use Illuminate\Http\Request;
@@ -28,11 +29,12 @@ class VersementController extends Controller
             'nombre_retour' => 'required|integer',
             'nombre_pain_matin' => 'required|integer',
             "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
-            "date_versement"=>"required|date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
+            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
             'livreur_id' => 'integer|exists:livreurs,id',
             'client_id' => 'integer|exists:clients,id',
             'abonnement_id' => 'integer|exists:abonnements,id',
             'boutique_id' => 'integer|exists:boutiques,id',
+            'distrib_panetier_id'=>'integer|exists:distrib_panetiers,id',
         ]);
         if (!isset($data['caisse_id'])){
             $data['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
@@ -49,31 +51,43 @@ class VersementController extends Controller
 
         $versement->montant_verse = $data['montant'];
         $versement->nombre_retour = $data['nombre_retour'];
-        $versement->date_versement = $data['date_versement'];
+        $versement->date_versement = today()->toDateString();
 
         $versement->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
         if ($versement->isForLivreur()){
             $livreur = Livreur::findOrFail($data['livreur_id']);
             $versement->livreur()->associate($livreur);
 
+
+
             // vérifier le montant versé par le livreur pour savoir s'il doit de l'argent ou on doit réduire son solde reliquat
             $compte_livreur = $livreur->compteLivreur;
+            $compte_data = $compte_livreur->toArray();
             $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $data['nombre_retour'];
-            $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
+            $montant_a_verser = ($nombre_pain_a_comptabiliser * $livreur->prix_pain) +
+                $compte_livreur->solde_reliquat;
             $montant_verse = $data['montant'];
+//            dd("Dette plus reliquat : ".($livreur->compteLivreur->dette + $compte_livreur->solde_reliquat),"Montant à verser : "
+//                .$montant_a_verser,
+//           "Montant versé : ". $montant_verse);
 
             if ($montant_verse > $montant_a_verser) {
                 $compte_livreur->solde_reliquat -= ($montant_verse - $montant_a_verser);
             }elseif ($montant_verse < $montant_a_verser){
                 $compte_livreur->solde_reliquat += ($montant_a_verser - $montant_verse);
+            }else{
+                $compte_livreur->solde_reliquat = 0;
+
             }
-            $compte_data = $compte_livreur->toArray();
             $versement->compte_data = $compte_data;
             $versement->save();
 
             $compte_livreur->dette = 0;
             $compte_livreur->solde_pain = 0;
             $compte_livreur->save();
+
+            //save distrib panetier
+
         }elseif ($versement->isForClient()) {
             $versement->client()->associate(Client::find($data['client_id']));
             $compte_client = $versement->client->compteClient;
@@ -96,17 +110,9 @@ class VersementController extends Controller
         $caisse = Caisse::find($data['caisse_id']);
         $caisse->augmenterSolde($montant_verse);
 
-            $identifier = '';
+            $identifier = $versement->identifier();
 
-            if ($versement->isForLivreur()) {
-                $identifier = $versement->livreur->identifier();
-            } elseif ($versement->isForClient()) {
-                $identifier = $versement->client->identifier();
-            } elseif ($versement->isForBoutique()) {
-                $identifier = $versement->boutique->identifier();
-            } else if ($versement->isForAbonnement()) {
-                $identifier = $versement->abonnement->identifier();
-            }
+
 
 // Create the recette with the determined identifier
            $caisse->recettes()->create([
@@ -117,7 +123,14 @@ class VersementController extends Controller
                 'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
             ]);
 
+            if (isset($data['distrib_panetier_id'])) {
+                $distrib_panetier = DistribPanetier::findOrFail($data['distrib_panetier_id']);
+                $distrib_panetier->nombre_retour = $data['nombre_retour'];
+                $distrib_panetier->versement()->associate($versement);
+                $distrib_panetier->save();
+            }
         });
+
 
 
         return response()->json($versement, 201);

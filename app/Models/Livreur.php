@@ -39,4 +39,13 @@ class Livreur extends Model
         return strtoupper($this->prenom . ' ' . $this->nom . ' : ' ). $this->telephone;
 
     }
+
+    public function getPrixPainAttribute() : int
+    {
+        if ($this->attributes['prix_pain'] == null || $this->attributes['prix_pain'] == 0) {
+            return $this->boulangerie->prix_pain_livreur;
+        }
+        return $this->attributes['prix_pain'];
+
+    }
 }

@@ -5,6 +5,7 @@ use App\Models\Boutique;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\ProductionPanetier;
+use App\Models\Versement;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -26,6 +27,8 @@ class CreateDistribPanetierTable extends Migration
             $table->foreignIdFor(Client::class)->nullable()->constrained()->onDelete('set null');
             $table->foreignIdFor(Boutique::class)->nullable()->constrained()->onDelete('set null');
             $table->foreignIdFor(Abonnement::class)->nullable()->constrained()->onDelete('set null');
+            $table->foreignIdFor(Versement::class)->nullable()->constrained()->onDelete('set null');
+            $table->integer('nombre_retour')->default(0);
             $table->timestamps();
             $table
                 ->foreignIdFor(ProductionPanetier::class)
