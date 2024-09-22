@@ -14,7 +14,8 @@ return new class extends Migration
     {
         Schema::create('chariots', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->unique();
+            $table->string('nom');
+            $table->unique(['nom','boulangerie_id']);
             $table->integer('nombre_pain')->default(0);
             $table->foreignIdFor(Boulangerie::class);
             $table->timestamps();

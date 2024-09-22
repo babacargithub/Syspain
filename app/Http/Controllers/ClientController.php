@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
 use App\Models\Client;
+use App\Models\CompteClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,6 +39,13 @@ class ClientController extends Controller
         $client = new Client($data);
         $client->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
         $client->save();
+        // create compte client
+        $compteClient = new  CompteClient();
+        $compteClient->solde_pain = 0;
+        $compteClient->solde_reliquat = 0;
+        $compteClient->client()->associate($client);
+        $compteClient->save();
+
 
         return response()->json($client, 201);
     }

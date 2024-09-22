@@ -8,6 +8,7 @@ use App\Models\Depense;
 use App\Models\DistribPanetier;
 use App\Models\ProductionPetrisseur;
 use App\Models\Recette;
+use App\Models\StockIntrant;
 use App\Models\Versement;
 use Illuminate\Http\Request;
 
@@ -18,6 +19,19 @@ class AdminController extends Controller
     {
         // TODO make this return only the boulangeries of the logged in user
         return response()->json(Boulangerie::all());
+    }
+    public function changeActiveBoulangerie(Request $request)
+    {
+        $request->validate([
+            'boulangerie_id' => 'required|exists:boulangeries,id'
+        ]);
+        // check if boulangeries belongs to current user
+        // TODO change this to the actual user
+
+        $boulangerie = Boulangerie::findOrFail($request->boulangerie_id);
+        session()->put('active_boulangerie_id', $boulangerie->id);
+        return response()->json('OK');
+
     }
     public function dashboard(Boulangerie $boulangerie)
     {
@@ -53,6 +67,9 @@ class AdminController extends Controller
             'totalVenteBoutiques' => 0,
             'totalRetoursPain' => (int) Versement::whereBoulangerieId($boulangerie->id)->whereDate('created_at', today())
                 ->whereNotNull('nombre_retour')->sum('nombre_retour'),
+            // TODO calculate later
+            "valeurStock" => (int) StockIntrant::whereBoulangerieId($boulangerie->id)
+                ->sum('quantite'),
 
             'totalVersementsClients' => (int)$boulangerie->versements()->whereNotNull('client_id')->sum('montant_verse'),
             'totalVersementsLivreurs' => (int) $boulangerie->versements()->whereNotNull('livreur_id')->sum('montant_verse'),

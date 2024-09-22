@@ -14,8 +14,12 @@ return new class extends Migration
     {
         Schema::create('type_depenses', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->nullable(false)->unique();
-            $table->foreignIdFor(Boulangerie::class);
+            $table->string('nom')->nullable(false);
+            $table->string('constant_name')->nullable();
+            $table->unique(['constant_name',"boulangerie_id"]);
+            $table->unique(['nom', 'boulangerie_id']);
+
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
         });
     }
 

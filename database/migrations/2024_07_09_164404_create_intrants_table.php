@@ -16,6 +16,8 @@ return new class extends Migration
             $table->id();
             $table->string('nom')->nullable(false);
             $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->string('constant_name')->nullable();
+            $table->unique(['constant_name',"boulangerie_id"]);
             $table->unique(['nom',"boulangerie_id"]);
             $table->timestamps();
         });

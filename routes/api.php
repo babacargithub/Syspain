@@ -118,6 +118,7 @@ Route::get('caisse',function (){
 //TODO implement the admin middleware later
 Route::prefix('admin')->group(function () {
     Route::get('boulangeries', [AdminController::class, 'boulangeries']);
+    Route::post('boulangeries/change_active', [AdminController::class, 'changeActiveBoulangerie']);
     Route::get('boulangeries/{boulangerie}/dashboard', [AdminController::class, 'dashboard']);
 })->middleware(AdminMiddleware::class);
 

@@ -7,16 +7,33 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 class Boulangerie extends Model
 {
     use HasFactory;
     protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client","boulangerie_id"];
 
+    /**
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     */
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {
         if (app()->runningUnitTests()) {
             return Boulangerie::factory()::mockActiveBoulangerie();
+        }
+        // if it is admin user we check is there is  active boulangerie_id in session data
+//        if (auth()->user()->isAdmin()) {
+        // TODO change later
+        $is_admin = true;
+        if ($is_admin) {
+            $boulangerie_id = request()->header('ACTIVE-BOULANGERIE-ID');
+
+            if ($boulangerie_id) {
+                return Boulangerie::findOrFail($boulangerie_id);
+            }
         }
         // TODO change this to the actual user
         return  Boulangerie::first() ?? Boulangerie::factory()->create();
