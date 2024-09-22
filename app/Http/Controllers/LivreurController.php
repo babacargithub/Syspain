@@ -146,10 +146,16 @@ class LivreurController extends Controller
     // get list of 30 distrib_panetiers of livreurs
     public function getDistribPanetiersOfLivreurs(Livreur $livreur)
     {
+        $totals = [
+            "valeur_pain" => $livreur->compteLivreur->dette,
+            "solde_reliquat" => $livreur->compteLivreur->solde_reliquat,
+            "solde_pain" => $livreur->compteLivreur->solde_pain,
+        ];
+
         $distribPanetiers = DistribPanetier::where('livreur_id', $livreur->id)
             ->orderBy('created_at', 'desc')
             ->limit(30)
-            ->get()->map(function ($distribPanetier) use ($livreur) {
+            ->get()->map(function (DistribPanetier $distribPanetier) use ($livreur) {
                 return [
                     'id' => $distribPanetier->id,
                     'nombre_pain' => $distribPanetier->nombre_pain,
@@ -157,15 +163,20 @@ class LivreurController extends Controller
                     "valeur_pain" => $distribPanetier->valeurPain(),
                     'prix_pain' => $livreur->prix_pain,
                     'created_at' => $distribPanetier->created_at,
+                    'montant_verse'=> $distribPanetier->versement !== null ? $distribPanetier->versement->montant_verse : 0,
+                    'reliquat'=> $distribPanetier->versement !== null ? $distribPanetier->versement->reliquat : 0,
                     'bonus' => $distribPanetier->bonus,
-                    'verse'=> $distribPanetier->versement_id !== null,
+                    'verse'=> $distribPanetier->versement !== null,
                     'date_production_panetier' => $distribPanetier->productionPanetier->date_production,
                     'periode' => $distribPanetier->productionPanetier->periode,
                     "identifier"=>"Lot pains du ".$distribPanetier->productionPanetier->identifier(),
                     'production_panetier' => $distribPanetier->productionPanetier->id,
                 ];
             });
-        return response()->json($distribPanetiers);
+        return response()->json([
+            'distribPanetiers' => $distribPanetiers,
+            'totals' => $totals,
+        ]);
 
     }
 }

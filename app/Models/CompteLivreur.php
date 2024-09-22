@@ -48,4 +48,14 @@ class CompteLivreur extends Model
         $this->solde_reliquat -= $solde_reliquat;
         return $this;
     }
+    public function getSoldePainAttribute() : int
+    {
+       return $this->livreur->distribPanetiers()->where('versement_id', null)->sum('nombre_pain');
+
+    }
+    public function getDetteAttribute() : int
+    {
+        return $this->livreur->distribPanetiers()
+            ->where('versement_id', null)->sum('nombre_pain') * $this->livreur->prix_pain;
+    }
 }

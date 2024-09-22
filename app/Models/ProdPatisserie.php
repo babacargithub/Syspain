@@ -17,10 +17,12 @@ class ProdPatisserie extends Model
         'date_production',
         'boulangerie_id',
         'verse',
+        'restant_transfere',
         'periode'
     ];
     protected $casts = [
-        'verse' => 'boolean'
+        'verse' => 'boolean',
+        'restant_transfere' => 'boolean'
     ];
     public function boulangerie(): BelongsTo
     {
@@ -43,6 +45,8 @@ class ProdPatisserie extends Model
     {
         return $this->articles->sum('montant_a_verser');
     }
+
+
     protected $appends = ['nombre_a_verser', 'montant_a_verser'];
 
 }

@@ -27,9 +27,9 @@ class VersementController extends Controller
         $data = $request->validate([
             'montant' => 'required|numeric',
             'nombre_retour' => 'required|integer',
-            'nombre_pain_matin' => 'required|integer',
+            'nombre_pain_matin' => 'integer',
             "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
-            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
+//            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
             'livreur_id' => 'integer|exists:livreurs,id',
             'client_id' => 'integer|exists:clients,id',
             'abonnement_id' => 'integer|exists:abonnements,id',
@@ -39,6 +39,8 @@ class VersementController extends Controller
         if (!isset($data['caisse_id'])){
             $data['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
         }
+
+
         // if neither livreur_id, client_id, abonnement_id, boutique_id is set, then it's a 422 error
         if (!isset($data['livreur_id']) && !isset($data['client_id']) && !isset($data['abonnement_id']) && !isset($data['boutique_id'])){
             return response()->json(['message' => 'Vous devez choisir un livreur, un client, un abonnement ou une 
@@ -48,8 +50,10 @@ class VersementController extends Controller
         $montant_verse = $data['montant'];
 
         DB::transaction(function () use ($data, $versement, $montant_verse) {
+            $distrib_panetier = DistribPanetier::findOrFail($data['distrib_panetier_id']);
+            $distrib_panetier->nombre_retour = $data['nombre_retour'];
 
-        $versement->montant_verse = $data['montant'];
+            $versement->montant_verse = $data['montant'];
         $versement->nombre_retour = $data['nombre_retour'];
         $versement->date_versement = today()->toDateString();
 
@@ -63,19 +67,16 @@ class VersementController extends Controller
             // vérifier le montant versé par le livreur pour savoir s'il doit de l'argent ou on doit réduire son solde reliquat
             $compte_livreur = $livreur->compteLivreur;
             $compte_data = $compte_livreur->toArray();
-            $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $data['nombre_retour'];
-            $montant_a_verser = ($nombre_pain_a_comptabiliser * $livreur->prix_pain) +
-                $compte_livreur->solde_reliquat;
+            $nombre_pain_a_comptabiliser = $distrib_panetier->nombre_pain - $data['nombre_retour'];
+            $montant_a_verser = $distrib_panetier->valeurPain();
             $montant_verse = $data['montant'];
-//            dd("Dette plus reliquat : ".($livreur->compteLivreur->dette + $compte_livreur->solde_reliquat),"Montant à verser : "
-//                .$montant_a_verser,
-//           "Montant versé : ". $montant_verse);
+
 
             if ($montant_verse > $montant_a_verser) {
                 $compte_livreur->solde_reliquat -= ($montant_verse - $montant_a_verser);
             }elseif ($montant_verse < $montant_a_verser){
                 $compte_livreur->solde_reliquat += ($montant_a_verser - $montant_verse);
-            }else{
+            }else if ($montant_verse == $montant_a_verser){
                 $compte_livreur->solde_reliquat = 0;
 
             }
@@ -122,13 +123,10 @@ class VersementController extends Controller
                 'commentaire' => 'Versement de ' . $identifier,
                 'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
             ]);
+            $distrib_panetier->versement()->associate($versement);
+            $distrib_panetier->save();
 
-            if (isset($data['distrib_panetier_id'])) {
-                $distrib_panetier = DistribPanetier::findOrFail($data['distrib_panetier_id']);
-                $distrib_panetier->nombre_retour = $data['nombre_retour'];
-                $distrib_panetier->versement()->associate($versement);
-                $distrib_panetier->save();
-            }
+
         });
 
 

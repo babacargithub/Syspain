@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Article;
 use App\Models\Caisse;
 use App\Models\ProdPatisserie;
 use App\Models\ArticleProdPatisserie;
@@ -29,9 +30,21 @@ class ProdPatisserieController extends Controller
     // get prod patisserie of a specific date
     public function getProdPatisserieByDate(Request $request, $date)
     {
-        $prodPatisseries = ProdPatisserie::where('date_production', $date)
-            ->orderByDesc('created_at')
-            ->get();
+        $prodPatisseries = ProdPatisserie::whereDate('date_production', '<=',$date)
+            ->orderByDesc('date_production')
+            ->limit(31)
+            ->get()->map(function ($prodPatisserie) {
+                return [
+                    'id' => $prodPatisserie->id,
+                    'periode' => $prodPatisserie->periode,
+                    'date_production' => $prodPatisserie->date_production,
+                    'verse' => (bool)$prodPatisserie->verse,
+                    'montant_a_verser' => $prodPatisserie->montant_a_verser,
+                    'restant_transfere' => (bool)$prodPatisserie->restant_transfere,
+                    'nombre_a_verser' => $prodPatisserie->nombre_a_verser,
+                    'articles' => [],
+                ];
+            });
         return response()->json($prodPatisseries);
     }
 
@@ -53,7 +66,7 @@ class ProdPatisserieController extends Controller
                             ->where('periode', request('periode'))
                             ->where('date_production', request('date_production'));
                     }) ],
-
+            // TODO remove later
             'periode' => 'in:matin,soir'
         ], [
             'date_production.unique' => 'On a déjà une production pour cette date et cette période'
@@ -155,6 +168,7 @@ class ProdPatisserieController extends Controller
                 'quantite' => $articleProdPatisserie->quantite,
                 'restant' => $articleProdPatisserie->restant,
                 'retour' => $articleProdPatisserie->retour,
+                'article_prix' => $articleProdPatisserie->article->prix,
                 'article_nom' => $articleProdPatisserie->article->nom,
             ];
         });
@@ -210,10 +224,26 @@ class ProdPatisserieController extends Controller
     public function encaisserProdPatisserie(Request $request, ProdPatisserie $prodPatisserie)
     {
         $data = $request->validate([
-            'montant' => 'required|numeric'
+            'montant' => 'required|numeric',
+            'articles'=>'required|array',
+            // articles should have id, retour and restant attributes required
+            'articles.*.id' => 'required|exists:article_prod_patisseries,id',
+            'articles.*.article_id' => 'required|exists:articles,id',
+            'articles.*.retour' => 'required|integer|min:0',
+            'articles.*.restant' => 'required|integer|min:0',
         ]);
+
         // create recettes
         DB::transaction(function () use ($data, $prodPatisserie) {
+            // update articles first
+            foreach ($data['articles'] as $articleData) {
+                $articleProdPatisserie = ArticleProdPatisserie::findOrFail($articleData['id']);
+                $articleProdPatisserie->update([
+                    'retour' => $articleData['retour'],
+                    'restant' => $articleData['restant'],
+                ]);
+            }
+
             $recette = new Recette();
             $recette->montant = $data['montant'];
             $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
@@ -240,5 +270,106 @@ class ProdPatisserieController extends Controller
 
 
     }
+
+    public function transfer(ProdPatisserie $prodPatisserie, Request $request)
+    {
+        if ($request->isMethod('get')) {
+            return $this->getTransferData($prodPatisserie);
+        }
+
+        if ($request->isMethod('post')) {
+            return $this->postTransferData($prodPatisserie,$request);
+        }
+
+        return response()->json(['message' => 'Method not allowed'], 405);
+    }
+
+    /**
+     * Get the nearest ProdPatisserie and articles with retour > 0.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    protected function getTransferData(ProdPatisserie $currentProdPatisserie)
+    {
+        // Find the current ProdPatisserie
+
+        // Fetch the nearest ProdPatisserie (add logic to determine the nearest one)
+        $nearestProdPatisserie = ProdPatisserie::where('date_production', '>=', $currentProdPatisserie->date_production)
+            ->where('id', '>', $currentProdPatisserie->id)
+            ->orderBy('date_production', 'asc')
+            ->first();
+
+        // Fetch articles with retour > 0
+        $articles = $currentProdPatisserie->articles()
+            ->where('restant', '>', 0)
+            ->get()->map(function ($articleProdPatisserie) {
+                return [
+                    'id' => $articleProdPatisserie->id,
+                    'article_id' => $articleProdPatisserie->article_id,
+                    'quantite' => $articleProdPatisserie->quantite,
+                    'retour' => $articleProdPatisserie->retour,
+                    'restant' => $articleProdPatisserie->restant,
+                    'article_prix' => $articleProdPatisserie->article->prix,
+                    'article_nom' => $articleProdPatisserie->article->nom,
+                ];
+            });
+
+        return response()->json([
+            'nearestProdPatisserie' => $nearestProdPatisserie,
+            'articles' => $articles,
+        ]);
+    }
+
+    /**
+     * Handle the transfer of articles to the nearest ProdPatisserie.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    protected function postTransferData(ProdPatisserie $source, Request
+$request)
+    {
+        $validated = $request->validate([
+            'articles' => 'required|array',
+            'articles.*.article_id' => 'required|exists:article_prod_patisseries,id',
+            'destination_prod_patisserie_id' => 'required|exists:prod_patisseries,id',
+        ]);
+        // if already transferred it should fail validation
+        if ($source->restant_transfere) {
+            return response()->json(['message' => 'Articles déjà transféré'], 422);
+        }
+
+            $articlesToTransfer = $source->articles()
+                ->whereIn('id', array_map(function ($article) {
+                    return $article['article_id'];
+                }, $validated['articles']))
+                ->get();
+
+            $destination = ProdPatisserie::findOrFail($validated['destination_prod_patisserie_id']);
+
+            DB::transaction(function () use ($articlesToTransfer, $destination, $source) {
+                foreach ($articlesToTransfer as $article) {
+                    $destination->articles()->create(
+                        [   'article_id' => $article->article_id,
+                            'quantite' => $article->restant,
+                            'retour' => 0,
+                            'restant' => 0,
+                        ]
+                    );
+                }
+                $source->restant_transfere = true;
+                $source->save();
+            });
+
+
+
+            // Here you could create a record that logs the transfer or perform any additional logic
+
+
+        return response()->json(['message' => 'Articles transferred successfully']);
+    }
+
+
 
 }

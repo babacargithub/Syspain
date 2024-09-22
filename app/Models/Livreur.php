@@ -34,6 +34,10 @@ class Livreur extends Model
         return $this->hasMany(Versement::class);
 
     }
+    public function distribPanetiers() : HasMany
+    {
+        return $this->hasMany(DistribPanetier::class);
+    }
     public function identifier() : string
     {
         return strtoupper($this->prenom . ' ' . $this->nom . ' : ' ). $this->telephone;

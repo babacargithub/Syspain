@@ -91,6 +91,8 @@ Route::get('types_depenses_recettes',function (){
 Route::resource('articles', ArticleController::class);
 Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
     'deleteArticle']);
+
+// ================== SECTION PRODUCTION PATISSERIE ====================
 Route::post('production_patisseries/{prodPatisserie}/encaisser', [ProdPatisserieController::class, 'encaisserProdPatisserie']);
 Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
 Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
@@ -100,6 +102,10 @@ Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieCo
 Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
     'production_patisseries' => 'prodPatisserie',
 ]);
+// transfert route should accept both get and post requests
+Route::match(['get', 'post'], 'production_patisseries/{prodPatisserie}/transfer', [ProdPatisserieController::class, 'transfer']);
+
+// ================== END SECTION PRODUCTION PATISSERIE ====================
 
 Route::get('caisse',function (){
 
