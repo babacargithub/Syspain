@@ -18,6 +18,7 @@ class Boulangerie extends Model
     /**
      * @throws ContainerExceptionInterface
      * @throws NotFoundExceptionInterface
+     * @throws \Exception
      */
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {
@@ -25,18 +26,29 @@ class Boulangerie extends Model
             return Boulangerie::factory()::mockActiveBoulangerie();
         }
         // if it is admin user we check is there is  active boulangerie_id in session data
-//        if (auth()->user()->isAdmin()) {
-        // TODO change later
-        $is_admin = true;
+        $user = auth()->user();
+        if ($user === null) {
+
+            throw new \Exception('User not logged in');
+
+        }
+        $is_admin = $user->is_admin;
         if ($is_admin) {
             $boulangerie_id = request()->header('ACTIVE-BOULANGERIE-ID');
 
             if ($boulangerie_id) {
                 return Boulangerie::findOrFail($boulangerie_id);
+            }else{
+                // get company of user
+                $company = CompanyUser::where('user_id',$user->id)->firstOrFail()->company;
+                return $company->boulangeries->firstOrFial();
             }
+        }else{
+            // get boulangrie of user
+            return BoulangerieUser::where('user_id',$user->id)->firstOrFail()->boulangerie;
+
         }
-        // TODO change this to the actual user
-        return  Boulangerie::first() ?? Boulangerie::factory()->create();
+
     }
 
     public function company(): BelongsTo

@@ -16,7 +16,8 @@ class PetrisseurController extends Controller
     {
         $productions = ProductionPetrisseur::ofCurrentBoulangerie()
             ->with('prodPanetier')
-            ->orderByDesc('date_production')->limit(30)
+            ->with('chariots.chariot')
+            ->orderByDesc('date_production')->limit(31)
             ->get();
         return response()->json($productions);
     }

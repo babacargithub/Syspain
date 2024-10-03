@@ -67,7 +67,6 @@ class RecetteController extends Controller
         $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
         DB::transaction(function () use ($recette) {
             $recette->save();
-            // TODO: check the right caisse
             $caisse = Caisse::requireCaisseOfLoggedInUser();
             $caisse->augmenterSolde($recette->montant);
         });
@@ -132,7 +131,6 @@ class RecetteController extends Controller
     {
         DB::transaction(function () use ($recette) {
             $recette->delete();
-            // TODO: check the right caisse
             $caisse = Caisse::requireCaisseOfLoggedInUser();
             $caisse->diminuerSolde($recette->montant);
         });

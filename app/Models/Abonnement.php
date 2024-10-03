@@ -14,6 +14,8 @@ class Abonnement extends Model
     protected $fillable = [
         'date_debut',
         'date_fin',
+        'client_id',
+
         'type',
         'prix',
     ];

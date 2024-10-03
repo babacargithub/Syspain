@@ -125,19 +125,49 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 class Boulangerie extends Model
 {
     use HasFactory;
     protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client","boulangerie_id"];
 
+    /**
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
+     * @throws \Exception
+     */
     public static function requireBoulangerieOfLoggedInUser(): Boulangerie
     {
         if (app()->runningUnitTests()) {
             return Boulangerie::factory()::mockActiveBoulangerie();
         }
-        // TODO change this to the actual user
-        return  Boulangerie::first() ?? Boulangerie::factory()->create();
+        // if it is admin user we check is there is  active boulangerie_id in session data
+        $user = auth()->user();
+        if ($user === null) {
+
+            throw new \Exception('User not logged in');
+
+        }
+        $is_admin = $user->is_admin;
+        if ($is_admin) {
+            $boulangerie_id = request()->header('ACTIVE-BOULANGERIE-ID');
+
+            if ($boulangerie_id) {
+                return Boulangerie::findOrFail($boulangerie_id);
+            }else{
+                // get company of user
+                $company = CompanyUser::where('user_id',$user->id)->firstOrFail()->company;
+                return $company->boulangeries->firstOrFial();
+            }
+        }else{
+            // get boulangrie of user
+            return BoulangerieUser::where('user_id',$user->id)->firstOrFail()->boulangerie;
+
+        }
+
     }
 
     public function company(): BelongsTo
@@ -161,6 +191,11 @@ class Boulangerie extends Model
     {
         return $this->hasMany(Boutique::class);
     }
+    public function abonnements(): HasManyThrough
+    {
+        return $this->hasManyThrough(Abonnement::class, Client::class);
+
+    }
     public function livreurs(): HasMany
     {
         return $this->hasMany(Livreur::class);
@@ -182,12 +217,36 @@ class Boulangerie extends Model
     {
         return $this->hasMany(Recette::class);
     }
-    public function abonnements(): HasMany
+
+
+
+}
+
+
+BoulangerieUser.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class BoulangerieUser extends Model
+{
+    use HasFactory;
+    protected $fillable = [
+        'boulangerie_id',
+        'user_id',
+    ];
+    public function boulangerie(): BelongsTo
     {
-        return $this->hasMany(Abonnement::class);
+        return $this->belongsTo(Boulangerie::class);
     }
-
-
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 }
 
 
@@ -244,12 +303,8 @@ class Caisse extends Model
 
     public static function requireCaisseOfLoggedInUser(): Caisse
     {
-        // TODO implement this method
         $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
-        return Caisse::firstOrCreate([
-            "nom" => "Caisse Principale ",
-            "boulangerie_id" => $boulangerie->id
-        ]);
+        return $boulangerie->caisses()->firstOrFail();
     }
 
     public function boulangerie(): BelongsTo
@@ -502,10 +557,21 @@ class Company extends Model
 {
     use HasFactory;
 
+    /**
+     * @throws \Exception
+     */
     public static function requireCompanyOfLoggedInUser()
     {
-        //TODO: Implement this method
-        return Company::first()??Company::factory()->create();
+        $user = auth()->user();
+        if ($user === null) {
+            if (app()->runningUnitTests()) {
+                return Company::first()??Company::factory()->create();
+
+            }
+            throw new \Exception('Require company of logged in user failed, User not logged in');
+        }
+        // find company
+        return CompanyUser::where('user_id',$user->id)->firstOrFail()->company;
     }
 
     public function boulangeries(): HasMany
@@ -513,6 +579,34 @@ class Company extends Model
         return $this->hasMany(Boulangerie::class);
     }
 
+}
+
+
+CompanyUser.php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class CompanyUser extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'company_id',
+        'user_id',
+    ];
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 }
 
 
@@ -591,6 +685,16 @@ class CompteLivreur extends Model
         $this->solde_reliquat -= $solde_reliquat;
         return $this;
     }
+    public function getSoldePainAttribute() : int
+    {
+       return $this->livreur->distribPanetiers()->where('versement_id', null)->sum('nombre_pain');
+
+    }
+    public function getDetteAttribute() : int
+    {
+        return $this->livreur->distribPanetiers()
+            ->where('versement_id', null)->sum('nombre_pain') * $this->livreur->prix_pain;
+    }
 }
 
 
@@ -641,13 +745,25 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\HigherOrderCollectionProxy;
 
+/**
+ * @property $nombre_retour
+ */
 class DistribPanetier extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        "nombre_pain", "livreur_id", "client_id", "boutique_id", "abonnement_id", "production_panetier_id","bonus"
+        "nombre_pain",
+        "livreur_id",
+        "client_id",
+        "boutique_id",
+        "abonnement_id",
+        "production_panetier_id",
+        "bonus",
+        'nombre_retour',
+        "versement_id"
     ];
     public function livreur(): BelongsTo
     {
@@ -670,7 +786,10 @@ class DistribPanetier extends Model
     {
         return $this->belongsTo(ProductionPanetier::class);
     }
-
+    public function versement(): BelongsTo
+    {
+        return $this->belongsTo(Versement::class);
+    }
     public function isForLivreur(): bool
     {
         return $this->livreur_id !== null;
@@ -687,6 +806,17 @@ class DistribPanetier extends Model
     public function isForAbonnement(): bool
     {
         return $this->abonnement_id !== null;
+    }
+
+    public function valeurPain(): int
+    {
+        if ($this->isForLivreur()) {
+            $prix_pain = $this->livreur->prix_pain;
+        }
+        else{
+            $prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
+        }
+        return ($this->attributes['nombre_pain'] - $this->attributes['nombre_retour'])* $prix_pain;
     }
 }
 
@@ -760,9 +890,22 @@ class Livreur extends Model
         return $this->hasMany(Versement::class);
 
     }
+    public function distribPanetiers() : HasMany
+    {
+        return $this->hasMany(DistribPanetier::class);
+    }
     public function identifier() : string
     {
         return strtoupper($this->prenom . ' ' . $this->nom . ' : ' ). $this->telephone;
+
+    }
+
+    public function getPrixPainAttribute() : int
+    {
+        if ($this->attributes['prix_pain'] == null || $this->attributes['prix_pain'] == 0) {
+            return $this->boulangerie->prix_pain_livreur;
+        }
+        return $this->attributes['prix_pain'];
 
     }
 }
@@ -838,10 +981,12 @@ class ProdPatisserie extends Model
         'date_production',
         'boulangerie_id',
         'verse',
+        'restant_transfere',
         'periode'
     ];
     protected $casts = [
-        'verse' => 'boolean'
+        'verse' => 'boolean',
+        'restant_transfere' => 'boolean'
     ];
     public function boulangerie(): BelongsTo
     {
@@ -864,6 +1009,8 @@ class ProdPatisserie extends Model
     {
         return $this->articles->sum('montant_a_verser');
     }
+
+
     protected $appends = ['nombre_a_verser', 'montant_a_verser'];
 
 }
@@ -932,17 +1079,20 @@ class ProductionPanetier extends Model
     }
     public function getTotalPainPetrisseurProduitAttribute()
     {
-        return ProductionPetrisseur::whereDateProduction($this->date_production)->sum('nombre_pain');
+        $prod = ProductionPetrisseur::whereId($this->production_petrisseur_id)->first();
+        return $prod !== null ? $prod->totalPain : 0;
 
     }
+
+    /** @noinspection UnknownColumnInspection */
     public function getNombrePainEntregistreAttribute()
     {
-        $nombre_pain_plat = $this->nombre_plat; // TODO dynamise this
+        $nombre_pain_plat = $this->nombre_plat;
         return $this->chariots()
                 ->selectRaw('SUM(chariot_prod_panetiers.nombre * chariots.nombre_pain) as total_nombre_pain')
                 ->join('chariots', 'chariots.id', '=', 'chariot_prod_panetiers.chariot_id')
                 ->where('chariot_prod_panetiers.production_panetier_id', $this->id)
-                ->value('total_nombre_pain') + ($this->nombre_plat * $nombre_pain_plat);
+                ->value('total_nombre_pain')+ $nombre_pain_plat;
     }
     public  function getTotalPainDistribueAttribute()
     {
@@ -965,15 +1115,16 @@ class ProductionPanetier extends Model
         }
 
     }
-    public function getCorrespondingProdPetrisseur() : ?ProductionPetrisseur
-    {
-        return ProductionPetrisseur::ofCurrentBoulangerie()->whereDateProduction($this->date_production)->first();
 
-    }
-    public function prodPetrisseur(): BelongsTo
+    public function productionPetrisseur(): BelongsTo
     {
         return $this->belongsTo(ProductionPetrisseur::class);
 
+    }
+    // get nombre pain attribute from total pain petrisseur produit
+    public function getNombrePainAttribute()
+    {
+        return $this->getTotalPainPetrisseurProduitAttribute();
     }
     protected $appends = ['nombre_pain_entregistre', 'total_pain_distribue','total_pain_petrisseur_produit'];
 }
@@ -991,6 +1142,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property mixed $date_production
@@ -1018,11 +1170,8 @@ class ProductionPetrisseur extends Model
             return $chariot->nombre * $chariot->chariot->nombre_pain;
         });
         $totalPain = $chariotsNombrePainMultiplied->sum();
-        // TODO check if has moitié
-        if ($this->nombre_pain >10000000000000) {
-            $totalPain += $this->nombre_pain;
-        }
-        return $totalPain;
+
+        return $totalPain + $this->attributes['nombre_plat'];
 
     }
     public function getTotalPainAttribute(): int
@@ -1046,6 +1195,12 @@ class ProductionPetrisseur extends Model
         })->sum();
     }
     protected $appends = ['total_pain','rendement','nombre_chariot'];
+
+    public function prodPanetier() : HasOne
+    {
+        return $this->hasOne(ProductionPanetier::class);
+
+    }
 
 
 
@@ -1214,6 +1369,13 @@ class TypeRecette extends Model
     use BoulangerieScope;
 
     use HasFactory;
+
+    const VERSEMENT_LIVREUR = "versement_livreur";
+    const VENTE_PATISSERIE = "vente_patisserie";
+    const VERSEMENT_CLIENT = 'versement_client';
+    const VERSEMENT_BOUTIQUE = 'versement_boutique';
+    const VERSEMENT_ABONNEMENT = 'versement_abonnement';
+    const VENTE_RESTANT = 'vente_restant';
     protected $fillable = ["nom","is_active",'boulangerie_id'];
 
     public function recettes(): HasMany
@@ -1235,13 +1397,18 @@ User.php
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+//use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+//use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+//    use CrudTrait;
+//    use HasRoles;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -1252,6 +1419,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'phone_number',
+        'is_admin',
+        'is_super_admin',
     ];
 
     /**
@@ -1274,7 +1444,18 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
+            'is_super_admin' => 'boolean',
         ];
+    }
+    public function isSuperAdmin(): bool
+    {
+        return $this->attributes['is_super_admin'];
+
+    }
+    public function isAdmin():bool
+    {
+        return $this->attributes['is_admin'];
     }
 }
 
@@ -1354,6 +1535,23 @@ class Versement extends Model
         return $this->abonnement_id !== null;
     }
 
+    public function identifier(): string
+    {
+        if ($this->isForLivreur()) {
+            return $this->livreur->identifier();
+        }
+        if ($this->isForClient()) {
+            return $this->client->identifier();
+        }
+        if ($this->isForBoutique()) {
+            return $this->boutique->identifier();
+        }
+        if ($this->isForAbonnement()) {
+            return $this->abonnement->identifier();
+        }
+        return 'Versement';
+    }
+
 }
 
 
@@ -1377,6 +1575,9 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
+            $table->bigInteger('phone_number')->unique();
+            $table->boolean('is_admin')->default(false);
+            $table->boolean('is_super_admin')->default(false);
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
@@ -1864,8 +2065,12 @@ return new class extends Migration
     {
         Schema::create('type_depenses', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->nullable(false)->unique();
-            $table->foreignIdFor(Boulangerie::class);
+            $table->string('nom')->nullable(false);
+            $table->string('constant_name')->nullable();
+            $table->unique(['constant_name',"boulangerie_id"]);
+            $table->unique(['nom', 'boulangerie_id']);
+
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
         });
     }
 
@@ -1936,6 +2141,8 @@ return new class extends Migration
             $table->id();
             $table->string('nom')->nullable(false);
             $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->string('constant_name')->nullable();
+            $table->unique(['constant_name',"boulangerie_id"]);
             $table->unique(['nom',"boulangerie_id"]);
             $table->timestamps();
         });
@@ -2048,7 +2255,8 @@ return new class extends Migration
     {
         Schema::create('chariots', function (Blueprint $table) {
             $table->id();
-            $table->string('nom')->unique();
+            $table->string('nom');
+            $table->unique(['nom','boulangerie_id']);
             $table->integer('nombre_pain')->default(0);
             $table->foreignIdFor(Boulangerie::class);
             $table->timestamps();
@@ -2383,6 +2591,7 @@ use App\Models\Boutique;
 use App\Models\Client;
 use App\Models\Livreur;
 use App\Models\ProductionPanetier;
+use App\Models\Versement;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -2404,6 +2613,8 @@ class CreateDistribPanetierTable extends Migration
             $table->foreignIdFor(Client::class)->nullable()->constrained()->onDelete('set null');
             $table->foreignIdFor(Boutique::class)->nullable()->constrained()->onDelete('set null');
             $table->foreignIdFor(Abonnement::class)->nullable()->constrained()->onDelete('set null');
+            $table->foreignIdFor(Versement::class)->nullable()->constrained()->onDelete('set null');
+            $table->integer('nombre_retour')->default(0);
             $table->timestamps();
             $table
                 ->foreignIdFor(ProductionPanetier::class)
@@ -2443,6 +2654,9 @@ return new class extends Migration
         Schema::create('type_recettes', function (Blueprint $table) {
             $table->id();
             $table->string('nom')->nullable(false);
+            $table->string('constant_name')->nullable();
+            $table->unique(['constant_name',"boulangerie_id"]);
+
             $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
             $table->unique(['nom', 'boulangerie_id']);
             $table->boolean('is_active')->default(true);
@@ -2555,6 +2769,7 @@ class CreateProdPatisseriesTable extends Migration
                 ->constrained()
                 ->cascadeOnDelete()
                 ->cascadeOnUpdate();
+            $table->boolean('restant_transfere')->default(false);
             $table->unique(['date_production','periode', 'boulangerie_id']);
             $table->boolean('verse')->default(false);
             $table->timestamps();
@@ -2608,11 +2823,116 @@ class CreateArticleProdPatisseriesTable extends Migration
 }
 
 
+2024_09_23_120601_create_company_users_table.php
+<?php
+
+use App\Models\Company;
+use App\Models\User;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('company_users', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Company::class);
+            $table->foreignIdFor(User::class);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('company_users');
+    }
+};
+
+
+2024_09_23_120735_create_boulangerie_users_table.php
+<?php
+
+use App\Models\Boulangerie;
+use App\Models\User;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('boulangerie_users', function (Blueprint $table) {
+            $table->id();
+            $table->foreignIdFor(Boulangerie::class)->constrained()->cascadeOnDelete();
+            $table->foreignIdFor(User::class)->constrained()->cascadeOnDelete();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('boulangerie_users');
+    }
+};
+
+
+2024_09_23_123542_create_personal_access_tokens_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->string('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('personal_access_tokens');
+    }
+};
+
+
 
 Here are my Routes:
 api.php
 <?php
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DepenseController;
@@ -2625,96 +2945,191 @@ use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\VersementController;
+use App\Http\Middleware\AdminMiddleware;
 use App\Models\Caisse;
 use App\Models\Chariot;
 use App\Models\Depense;
 use App\Models\TypeDepense;
 use App\Models\TypeRecette;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Route;
-Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
-Route::resource('petrisseurs', PetrisseurController::class);
-Route::get('panetiers/date/{date}', [PanetierController::class, 'productionDuJour']);
-Route::resource('panetiers', PanetierController::class)
 
-    ->parameters([
-        'panetiers' => 'productionPanetier',
+// login sections
+function loginResponse(): Illuminate\Http\Response
+{
+    $token = request()->user()->createToken("name", [], Carbon::now()->addDay());
+    $params = [];
+
+    $roles = [];
+//    foreach (request()->user()->roles as $role) {
+//        $roles[] = $role->name;
+//
+//    }
+    $permissions = [];
+    /*foreach (request()->user()->permissions as $permission) {
+        $roles[] = $permission->name;
+
+    }*/
+    $user = request()->user();
+    return response(["token" => $token, "params" => $params,
+        "user" => [
+            "email" => $user->email,
+            "token" => $token->plainTextToken,
+            "tokenExpiresAt" => $token->accessToken->expires_at,
+            "name" => $user->name,
+            "roles" => $roles,
+            "permissions" => $permissions,
+            "isAuthenticated" => true,
+            "isSuperAdmin" => $user->isSuperAdmin(),
+            "is_admin" => $user->isAdmin(),
+        ],
+        "should_change_password" => (Hash::check("0000", $user->password) || Hash::check("1234", $user->password))
+    ]);
+}
+
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+Route::post('/login', function (Request $request) {
+    // Validate phone number and password
+    $credentials = $request->validate([
+        'phone_number' => ['required'], // Expecting phone number instead of email
+        'password' => ['required'],
+    ]);
+
+    // Attempt authentication using phone_number and password
+    if (Auth::attempt(['phone_number' => $credentials['phone_number'], 'password' => $credentials['password']])) {
+
+        // Validate if user is disabled after authentication
+        $request->validate([
+            'phone_number' => [function ($attribute, $value, $fail) {
+                if (request()->user()->disabled) {
+                    $fail("Compte désactivé !");
+                    Auth::logout();
+                }
+            }],
+        ]);
+
+        // Call your login response method
+        return loginResponse();
+
+    } else {
+        // Invalid credentials response
+        return response("Invalid credentials")->setStatusCode(401);
+    }
+});
+
+
+
+
+
+// Protect routes with sanctum middleware
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
+    Route::resource('petrisseurs', PetrisseurController::class);
+    Route::get('panetiers/date/{date}', [PanetierController::class, 'productionDuJour']);
+    Route::resource('panetiers', PanetierController::class)
+
+        ->parameters([
+            'panetiers' => 'productionPanetier',
+            // customise the store route
+        ]);
+    Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
+    Route::get('distribution_panetiers/{productionPanetier}/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
+    Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
+    Route::resource('distribution_panetiers', DistribPanetierController::class,[
+        'only' => ['index','update','destroy','show']
+    ])->parameters([
+        'distribution_panetiers' => 'distribPanetier',
         // customise the store route
     ]);
-Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
-Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
-Route::resource('distribution_panetiers', DistribPanetierController::class,[
-    'only' => ['index','update','destroy','show']
-])->parameters([
-    'distribution_panetiers' => 'distribPanetier',
-    // customise the store route
-]);
-Route::get('versements/livreurs', [VersementController::class, 'versementsLivreurs'])->name('versements.livreurs');
+    Route::get('versements/livreurs', [VersementController::class, 'versementsLivreurs'])->name('versements.livreurs');
+    Route::get('versements/destinations', [VersementController::class, 'destinations'])->name('versements.destinations');
 // versements d'une date
-Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
-Route::put('livreurs/{livreur}/activate/{is_active}', [LivreurController::class, 'disable'])->name('livreurs.activate');
-Route::resource('livreurs', LivreurController::class);
-Route::resource('versements', VersementController::class);
-Route::get('depenses/date/{date}', [DepenseController::class, 'depensesDate'])->name('depenses.date');
-Route::resource('depenses', DepenseController::class);
-Route::resource('intrants', IntrantController::class);
-Route::post('stocks/entree',[StockController::class,'entreeStock']);
-Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
-Route::get('stocks/movements/{intrant}', [StockController::class, 'getMovements']);
-Route::put('clients/{client}/toggle', [ClientController::class, 'toggle']);
+    Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
 
-Route::resource('clients', ClientController::class);
+// ============= SECTION LIVREURS ====================
+    Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
+    Route::get('/livreurs/{livreur}/distribution_panetiers', [LivreurController::class, 'getDistribPanetiersOfLivreurs']);
 
-Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
-Route::resource('recettes', RecetteController::class);
-Route::get('chariots',function (){
-    return response()->json(Chariot::all()->map(function (Chariot $chariot){
-        return [
-            'id' => $chariot->id,
-            'nom' => $chariot->nom,
-            "nombre_pain" => $chariot->nombre_pain,
-        ];
-    }));
+    Route::put('livreurs/{livreur}/activate/{is_active}', [LivreurController::class, 'disable'])->name('livreurs.activate');
+    Route::resource('livreurs', LivreurController::class);
+    Route::resource('versements', VersementController::class);
+    Route::get('depenses/date/{date}', [DepenseController::class, 'depensesDate'])->name('depenses.date');
+    Route::resource('depenses', DepenseController::class);
+    Route::resource('intrants', IntrantController::class);
+    Route::post('stocks/entree',[StockController::class,'entreeStock']);
+    Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
+    Route::get('stocks/movements/{intrant}', [StockController::class, 'getMovements']);
+    Route::put('clients/{client}/toggle', [ClientController::class, 'toggle']);
 
-});
-Route::get('types_depenses_recettes',function (){
-    return response()->json([
-        'type_depenses' => TypeDepense::all()->map(function (TypeDepense $depense){
+    Route::resource('clients', ClientController::class);
+
+    Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
+    Route::resource('recettes', RecetteController::class);
+    Route::get('chariots',function (){
+        return response()->json(Chariot::all()->map(function (Chariot $chariot){
             return [
-                'id' => $depense->id,
-                'nom' => $depense->nom,
+                'id' => $chariot->id,
+                'nom' => $chariot->nom,
+                "nombre_pain" => $chariot->nombre_pain,
             ];
-        }),
-        'type_recettes' => TypeRecette::all()->map(function (TypeRecette $recette){
-            return [
-                'id' => $recette->id,
-                'nom' => $recette->nom,
-            ];
-        }),
+        }));
+
+    });
+    Route::get('types_depenses_recettes',function (){
+        return response()->json([
+            'type_depenses' => TypeDepense::all()->map(function (TypeDepense $depense){
+                return [
+                    'id' => $depense->id,
+                    'nom' => $depense->nom,
+                ];
+            }),
+            'type_recettes' => TypeRecette::all()->map(function (TypeRecette $recette){
+                return [
+                    'id' => $recette->id,
+                    'nom' => $recette->nom,
+                ];
+            }),
+        ]);
+    });
+    Route::resource('articles', ArticleController::class);
+    Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
+        'deleteArticle']);
+
+// ================== SECTION PRODUCTION PATISSERIE ====================
+    Route::post('production_patisseries/{prodPatisserie}/encaisser', [ProdPatisserieController::class, 'encaisserProdPatisserie']);
+    Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
+    Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
+    Route::get('production_patisseries/date/{date}', [ProdPatisserieController::class, 'getProdPatisserieByDate']);
+    Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieController::class, 'updateArticles']);
+
+    Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
+        'production_patisseries' => 'prodPatisserie',
     ]);
+// transfert route should accept both get and post requests
+    Route::match(['get', 'post'], 'production_patisseries/{prodPatisserie}/transfer', [ProdPatisserieController::class, 'transfer']);
+
+// ================== END SECTION PRODUCTION PATISSERIE ====================
+
+    Route::get('caisse',function (){
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        return response()->json(["solde" => $caisse->solde]);
+
+    });
+
+// admin section routes with 'admin' prefix and protected by admin middleware
+    Route::prefix('admin')->group(function () {
+        Route::get('boulangeries', [AdminController::class, 'boulangeries']);
+        Route::post('boulangeries/change_active', [AdminController::class, 'changeActiveBoulangerie']);
+        Route::get('boulangeries/{boulangerie}/dashboard', [AdminController::class, 'dashboard']);
+    })->middleware(AdminMiddleware::class);
+
+
+
 });
-Route::resource('articles', ArticleController::class);
-Route::delete('production_patisseries/delete_article/{articleProdPatisserie}', [ProdPatisserieController::class,
-    'deleteArticle']);
-Route::post('production_patisseries/{prodPatisserie}/encaisser', [ProdPatisserieController::class, 'encaisserProdPatisserie']);
-Route::post('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'storeArticles']);
-Route::get('production_patisseries/{prod_patisserie}/articles', [ProdPatisserieController::class, 'getArticles']);
-Route::get('production_patisseries/date/{date}', [ProdPatisserieController::class, 'getProdPatisserieByDate']);
-Route::put('production_patisseries/{prodPatisserie}/articles', [ProdPatisserieController::class, 'updateArticles']);
-
-Route::resource('production_patisseries', ProdPatisserieController::class)->parameters([
-    'production_patisseries' => 'prodPatisserie',
-]);
-
-Route::get('caisse',function (){
-
-    $caisse = Caisse::requireCaisseOfLoggedInUser();
-    return response()->json(["solde" => $caisse->solde]);
-
-});
-
-
-
-
 
 console.php
 <?php
@@ -2744,6 +3159,7 @@ DistribPanetierResource.php
 
 namespace App\Http\Resources;
 
+use App\Models\Boulangerie;
 use App\Models\DistribPanetier;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -2765,15 +3181,20 @@ class DistribPanetierResource extends JsonResource
         ];
         if ($this->isForLivreur()) {
             $data["livreur"] = $this->livreur->identifier();
+            $data["montant"] = $this->nombre_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
+
         }
         if ($this->isForClient()) {
             $data["client"] = $this->client->identifier();
+            $data["montant"] = $this->nombre_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
         }
         if ($this->isForBoutique()) {
             $data["boutique"] = $this->boutique->nom;
+            $data["montant"] = $this->nombre_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
         }
         if ($this->isForAbonnement()) {
             $data["abonnement"] = $this->abonnement->identifier();
+            $data["montant"] = $this->nombre_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
         }
 
         return  $data;
@@ -2844,8 +3265,8 @@ class ProdPanetierResource extends JsonResource
         /** @var $this ProductionPanetier */
         $definition = [
             "id" => $this->id,
-            "nombre_petrisseur" => $this->prodPetrisseur !== null ?
-                $this->prodPetrisseur->total_pain : 0,
+            "nombre_petrisseur" => $this->productionPetrisseur() !== null ?
+                $this->productionPetrisseur->totalPain : null,
             "date_production" => $this->date_production,
             "identifier" => $this->identifier(),
             "nombre_pain" => $this->nombre_pain,
@@ -2867,7 +3288,7 @@ class ProdPanetierResource extends JsonResource
             }),
             "mange" => $this->mange,
         ];
-        $definition['resultat'] = $definition['nombre_petrisseur'] - $definition['nombre_pain_entregistre'];
+        $definition['resultat'] = $definition['nombre_petrisseur'] - $definition['total_pain_distribue'];
         return $definition;
     }
 }
@@ -2980,6 +3401,105 @@ use Illuminate\Http\Request;
 class AbonnementController extends Controller
 {
     //
+}
+
+
+AdminController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Boulangerie;
+use App\Models\Company;
+use App\Models\CompteLivreur;
+use App\Models\Depense;
+use App\Models\DistribPanetier;
+use App\Models\ProductionPetrisseur;
+use App\Models\Recette;
+use App\Models\StockIntrant;
+use App\Models\TypeRecette;
+use App\Models\Versement;
+use Exception;
+use Illuminate\Http\Request;
+
+class AdminController extends Controller
+{
+    //
+    /**
+     * @throws Exception
+     */
+    public function boulangeries()
+    {
+        //  return only the boulangeries of the logged-in user
+        $company =  Company::requireCompanyOfLoggedInUser();
+        return response()->json($company->boulangeries);
+    }
+    public function changeActiveBoulangerie(Request $request)
+    {
+        $request->validate([
+            'boulangerie_id' => 'required|exists:boulangeries,id'
+        ]);
+        // check if boulangeries belongs to current user
+        $company = Company::requireCompanyOfLoggedInUser();
+        if (!in_array($request->boulangerie_id, $company->boulangeries->pluck('id')->toArray())) {
+            return response()->json(['message' => 'Cette boulangerie n\'appartient pas à votre entreprise'], 403);
+        }
+
+        $boulangerie = Boulangerie::findOrFail($request->boulangerie_id);
+        session()->put('active_boulangerie_id', $boulangerie->id);
+        return response()->json('OK');
+
+    }
+    public function dashboard(Boulangerie $boulangerie)
+    {
+        $date = today()->toDateString();
+        $totalProduction = 0;
+        // calculate total production
+        $productions = ProductionPetrisseur::whereBoulangerieId($boulangerie->id)->whereDateProduction($date)
+            ->get();
+        foreach ($productions as $production) {
+            $totalProduction += $production->total_pain;
+
+        }
+        $totals = [
+            'versementsJour' => (int)$boulangerie->versements()->whereDate('created_at', today())->sum('montant_verse'),
+            'totalPain' => (int) $totalProduction,
+            'totalRecettes' => (int)Recette::whereBoulangerieId($boulangerie->id)->whereDate('created_at', today())->sum
+            ('montant'),
+            'totalDepenses' => (int) Depense::whereBoulangerieId($boulangerie->id)->whereDate('created_at', today())
+                ->sum('montant'),
+            'soldeDetteLivreurs' => (int) CompteLivreur::whereHas('livreur', function ($query) use ($boulangerie) {
+                $query->where('boulangerie_id', $boulangerie->id);
+            })->sum('dette'),
+            'soldeReliquatLivreurs' => (int) CompteLivreur::whereHas('livreur', function ($query) use ($boulangerie) {
+                $query->where('boulangerie_id', $boulangerie->id);
+            })->sum('solde_reliquat'),
+            'soldePainLivreurs' => (int) CompteLivreur::whereHas('livreur', function ($query) use ($boulangerie) {
+                $query->where('boulangerie_id', $boulangerie->id);
+            })->sum('solde_pain'),
+//            'totalVentePatisserie' => $boulangerie->ventesPatisserie()->sum('montant'),
+//            'totalVenteBoutiques' => $boulangerie->ventesBoutique()->sum('montant'),
+            'totalVentePatisserie' => Recette::whereBoulangerieId($boulangerie->id)
+                ->whereDate('created_at', $date)
+                ->whereHas('typeRecette', function ($query) use ($boulangerie) {
+                    $query->whereTypeRecetteId(TypeRecette::whereBoulangerieId($boulangerie->id)->where('constant_name', TypeRecette::VENTE_PATISSERIE)->first()?->id);
+                })->sum('montant'),
+            'totalVenteBoutiques' => Versement::whereBoulangerieId($boulangerie->id)->whereDate('created_at', $date)
+                ->whereNotNull('boulangerie_id')->sum('montant_verse'),
+            'totalRetoursPain' => (int) Versement::whereBoulangerieId($boulangerie->id)->whereDate('created_at', $date)
+                ->whereNotNull('nombre_retour')->sum('nombre_retour'),
+            //  calculate total stock using total of quantity of intrants and intrant prix_achat
+            // the sum should take total quantity of intrant and multiply by prix_achat of Intrant model using the
+            // relation
+            "valeurStock" => (int) StockIntrant::select('quantite * prix_achat as total')->whereBoulangerieId($boulangerie->id)->sum('total'),
+
+            'totalVersementsClients' => (int)$boulangerie->versements()->whereNotNull('client_id')->sum('montant_verse'),
+            'totalVersementsLivreurs' => (int) $boulangerie->versements()->whereNotNull('livreur_id')->sum('montant_verse'),
+        ];
+
+        return response()->json($totals);
+
+    }
 }
 
 
@@ -3103,6 +3623,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
 use App\Models\Client;
+use App\Models\CompteClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -3137,6 +3658,13 @@ class ClientController extends Controller
         $client = new Client($data);
         $client->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
         $client->save();
+        // create compte client
+        $compteClient = new  CompteClient();
+        $compteClient->solde_pain = 0;
+        $compteClient->solde_reliquat = 0;
+        $compteClient->client()->associate($client);
+        $compteClient->save();
+
 
         return response()->json($client, 201);
     }
@@ -3374,129 +3902,210 @@ class DistribPanetierController extends Controller
 {
     public function store(ProductionPanetier $productionPanetier, Request $request)
     {
+        // the request data should have the following fields livreurs array, clients array, abonnements array, boutiques
+        // array. The livreurs array should have the following fields: livreur_id, nombre_pain, bonus, the same for
+        // clients, abonnements, and boutiques
         $data = $request->validate([
-            'nombre_pain' => 'required|integer',
-            'livreur_id' => 'nullable|integer|exists:livreurs,id',
-            'client_id' => 'nullable|integer|exists:clients,id',
-            'abonnement_id'=> 'nullable|integer|exists:abonnements,id',
-            "boutique_id" => "nullable|integer|exists:boutiques,id",
-            "paye"=> "boolean",
-            'production_panetier_id' => 'integer|exists:production_panetiers,id',]);
-        $productionPanetier->nombre_pain = $productionPanetier->nombre_pain_entregistre;
+            'livreurs' => 'array',
+            'clients' => 'array',
+            'abonnements' => 'array',
+            'boutiques' => 'array',
+            'livreurs.*.livreur_id' => 'required|integer|exists:livreurs,id',
+            'livreurs.*.nombre_pain' => 'required|integer',
+            'livreurs.*.bonus' => 'required|integer',
+            'clients.*.client_id' => 'required|integer|exists:clients,id',
+            'clients.*.nombre_pain' => 'required|integer',
+            'clients.*.bonus' => 'required|integer',
+            'abonnements.*.abonnement_id' => 'required|integer|exists:abonnements,id',
+            'abonnements.*.nombre_pain' => 'required|integer',
+            'abonnements.*.bonus' => 'required|integer',
+            'boutiques.*.boutique_id' => 'required|integer|exists:boutiques,id',
+            'boutiques.*.nombre_pain' => 'required|integer',
+            'boutiques.*.bonus' => 'required|integer',
+
+        ]);
+        // check if the sum of all the pain distributed is equal to the pain produced
+        // $data['nombre_pain'] is the sum of livreurs, clients, abonnements, and boutiques in request
+        // we must first sum the existing distribPanetiers  in order to take into account the update
+        // of the distribPanetier
+
+        // add the 4 values
+        $totalPainOfExisting = $productionPanetier->distribPanetiers()
+            ->where(function($query) use ($data) {
+                $query->whereIn('livreur_id', collect($data['livreurs'])->pluck('livreur_id')->toArray())
+                    ->orWhereIn('client_id', collect($data['clients'])->pluck('client_id')->toArray())
+                    ->orWhereIn('abonnement_id', collect($data['abonnements'])->pluck('abonnement_id')->toArray())
+                    ->orWhereIn('boutique_id', collect($data['boutiques'])->pluck('boutique_id')->toArray());
+            })->sum('nombre_pain');
+//
+
+        $data['nombre_pain'] =
+            collect($data['livreurs'])->sum('nombre_pain') +
+            collect($data['clients'])->sum('nombre_pain') +
+            collect($data['abonnements'])->sum('nombre_pain') +
+            collect($data['boutiques'])->sum('nombre_pain') - $totalPainOfExisting;
+        // loop through livreurs and create a distribPanetier for each
+
         if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain produit"], 422);
-        }
-        else if ($data['nombre_pain'] < 0) {
+        } else if ($data['nombre_pain'] < 0) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être négatif"], 422);
+        } else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain_entregistre - $totalPainOfExisting)) {
+            return response()->json(["message" => "Pour le total de pain que vous voulez enregistrer le nombre de pain restant est insuffisant !"], 422);
         }
-        else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain -
-                $productionPanetier->total_pain_distribue)) {
-            return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain restant"], 422);
-        }
-        $distribPanetier = new DistribPanetier($data);
         // start transaction before saving operations
-        DB::transaction(function () use ($productionPanetier, $distribPanetier) {
-            $productionPanetier->distribPanetiers()->save($distribPanetier);
-            // if it's a client, we need to update the client's account
-            if ($distribPanetier->isForClient()) {
-                $client = Client::find($distribPanetier->client_id);
-                $compte_client = $client->compteClient;
-                $compte_client->solde_pain += $distribPanetier->nombre_pain;
-                $compte_client->dette = $compte_client->dette + ($distribPanetier->nombre_pain *
-                        $productionPanetier->prix_pain_client);
+        DB::transaction(function () use ($productionPanetier, $data) {
+            $prix_pain_livreur = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
+            $prix_pain_client = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
+            // loop through livreurs and create a distribPanetier for each
+            foreach ($data['livreurs'] as $distrib_data) {
 
-                $compte_client->save();
+
+                $distribPanetier = $productionPanetier->distribPanetiers()->whereLivreurId($distrib_data['livreur_id'])
+                    ->first();
+                if ($distribPanetier == null) {
+                    $distribPanetier = new DistribPanetier([
+                        'livreur_id' => $distrib_data['livreur_id'],
+                        'nombre_pain' => $distrib_data['nombre_pain'],
+                        'bonus' => $distrib_data['bonus'],
+                    ]);
+                    $productionPanetier->distribPanetiers()->save($distribPanetier);
+                    $livreur = $distribPanetier->livreur;
+                    $compte_livreur = $livreur->compteLivreur;
+                    $compte_livreur->augmenterSoldePain($distrib_data['nombre_pain']);
+                    $compte_livreur->augmenterDette(($distrib_data['nombre_pain'] *
+                            $livreur->prix_pain));
+                    $compte_livreur->save();
+                } else {
+                    $oldNombrePain = $distribPanetier->nombre_pain;
+                    $distribPanetier->nombre_pain = $distrib_data['nombre_pain'];
+                    $distribPanetier->bonus = $distrib_data['bonus'];
+                    $distribPanetier->save();
+                    // update compte livreur
+                    $livreur = $distribPanetier->livreur;
+                    $compte_livreur = $livreur->compteLivreur;
+                    // we check the difference between the new nombre_pain and the old one
+                    $diff = $distrib_data['nombre_pain'] - $oldNombrePain;
+                    if ($diff > 0) {
+                        $compte_livreur->augmenterSoldePain($diff);
+                        $compte_livreur->augmenterDette( ($diff *
+                               $livreur->prix_pain));
+                    } else if ($diff < 0) {
+                        $compte_livreur->diminuerSoldePain(abs($diff));
+                        $compte_livreur->diminuerDette((abs($diff) *
+                                $livreur->prix_pain));
+                    }
+                    $compte_livreur->save();
+                }
+
             }
-            // if it's a livreur, we need to update the livreur  account
-            if ($distribPanetier->isForLivreur()) {
-                $livreur = Livreur::find($distribPanetier->livreur_id);
-                $compte_livreur = $livreur->compteLivreur;
-                $compte_livreur->solde_pain += $distribPanetier->nombre_pain;
-                $compte_livreur->dette = $compte_livreur->dette + ($distribPanetier->nombre_pain *
-                        $productionPanetier->prix_pain_livreur);
-                $compte_livreur->save();
+//            $productionPanetier->distribPanetiers()->save($distribPanetier);
+            // loop through clients and create a distribPanetier for each
+            foreach ($data['clients'] as $client_data) {
+                $distribPanetier = $productionPanetier->distribPanetiers()->whereClientId($client_data['client_id'])
+                    ->first();
+                if ($distribPanetier == null) {
+                    $distribPanetier = new DistribPanetier([
+                        'client_id' => $client_data['client_id'],
+                        'nombre_pain' => $client_data['nombre_pain'],
+                    ]);
+                    $productionPanetier->distribPanetiers()->save($distribPanetier);
+                    $client = Client::find($client_data['client_id']);
+                    $compte_client = $client->compteClient;
+                    $compte_client->solde_pain += $client_data['nombre_pain'];
+                    $compte_client->dette += ($client_data['nombre_pain'] *
+                            $prix_pain_client);
+                    $compte_client->save();
+                } else {
+                    $oldNombrePain = $distribPanetier->nombre_pain;
+                    $distribPanetier->nombre_pain = $client_data['nombre_pain'];
+                    $distribPanetier->bonus = $client_data['bonus'];
+                    $distribPanetier->save();
+                    $client = Client::find($client_data['client_id']);
+                    $compte_client = $client->compteClient;
+                    $diff = $client_data['nombre_pain'] - $oldNombrePain;
+                    if ($diff > 0) {
+                        $compte_client->solde_pain += $diff;
+                        $compte_client->dette += ($diff *
+                                $prix_pain_client);
+                    } else if ($diff < 0) {
+                        $compte_client->solde_pain -= abs($diff);
+                        $compte_client->dette -= (abs($diff) *
+                                $prix_pain_client);
+                    }
+                    $compte_client->save();
+                }
+
             }
-            // if it's a boutique, we need to update the boutique's account
-            if ($distribPanetier->isForBoutique()) {
-                $boutique = Boutique::find($distribPanetier->boutique_id);
-                $boutique->solde_pain += $distribPanetier->nombre_pain;
-                $boutique->save();
-            }
-            // if it's an abonnement, we need to update the abonnement account
-            if ($distribPanetier->isForAbonnement()) {
-                $abonnement = Abonnement::find($distribPanetier->abonnement_id);
-                $abonnement->solde_pain += $distribPanetier->nombre_pain;
-                $abonnement->dette = $abonnement->dette + ($distribPanetier->nombre_pain *
+            // loop through abonnements and create a distribPanetier for each
+            foreach ($data['abonnements'] as $abonnement_data) {
+                $distribPanetier = $productionPanetier->distribPanetiers()->whereAbonnementId($abonnement_data['abonnement_id'])
+                    ->first();
+                    $abonnement = Abonnement::find($abonnement_data['abonnement_id']);
+                if ($distribPanetier == null) {
+                    $distribPanetier = new DistribPanetier([
+                        'abonnement_id' => $abonnement_data['abonnement_id'],
+                        'nombre_pain' => $abonnement_data['nombre_pain'],
+                    ]);
+                    $productionPanetier->distribPanetiers()->save($distribPanetier);
+                    $abonnement->solde_pain += $abonnement_data['nombre_pain'];
+                    $abonnement->dette += ($abonnement_data['nombre_pain'] *
                         $productionPanetier->prix_pain_client);
+                } else {
+                    $oldNombrePain = $distribPanetier->nombre_pain;
+                    $distribPanetier->nombre_pain = $abonnement_data['nombre_pain'];
+                    $distribPanetier->bonus = $abonnement_data['bonus'];
+                    $distribPanetier->save();
+                    $abonnement->solde_pain += $abonnement_data['nombre_pain'];
+                    $diff = $abonnement_data['nombre_pain'] - $oldNombrePain;
+                    if ($diff > 0) {
+                        $abonnement->dette += ($diff *
+                            $prix_pain_client);
+                    } else if ($diff < 0) {
+                        $abonnement->dette -= (abs($diff) *
+                            $prix_pain_client);
+                    }
+                }
                 $abonnement->save();
+
             }
+            // loop through boutiques and create a distribPanetier for each
+            foreach ($data['boutiques'] as $boutique_data) {
+                $distribPanetier = $productionPanetier->distribPanetiers()->whereBoutiqueId($boutique_data['boutique_id'])
+                    ->first();
+                    $boutique = Boutique::find($boutique_data['boutique_id']);
+                if ($distribPanetier == null) {
+                    $distribPanetier = new DistribPanetier([
+                        'boutique_id' => $boutique_data['boutique_id'],
+                        'nombre_pain' => $boutique_data['nombre_pain'],
+                    ]);
+                    $boutique->solde_pain += $boutique_data['nombre_pain'];
+                    $boutique->save();
+                    $productionPanetier->distribPanetiers()->save($distribPanetier);
+                } else {
+                    $oldNombrePain = $distribPanetier->nombre_pain;
+                    $distribPanetier->nombre_pain = $boutique_data['nombre_pain'];
+                    $distribPanetier->bonus = $boutique_data['bonus'];
+                    $distribPanetier->save();
+                    $diff = $boutique_data['nombre_pain'] - $oldNombrePain;
+                    if ($diff > 0) {
+                        $boutique->solde_pain += $diff;
+                    } else if ($diff < 0) {
+                        $boutique->solde_pain -= abs($diff);
+                    }
+                    $boutique->save();
+                }
+
+            }
+
 
         });
 
 
-
-        return response()->json($distribPanetier, 201);
+        return response()->json($data, 201);
 
     }
 
-    public function update(DistribPanetier $distribPanetier, Request $request)
-    {
-        $data = $request->validate([
-            'nombre_pain' => 'integer',
-            'livreur_id' => 'nullable|integer|exists:livreurs,id',
-            'client_id' => 'nullable|integer|exists:clients,id',
-            'abonnement_id'=> 'nullable|integer|exists:abonnements,id',
-            "boutique_id" => "nullable|integer|exists:boutiques,id",
-            'production_panetier_id' => 'integer|exists:production_panetiers,id',]);
-
-
-
-        // after update, we take the difference and update solde pain if livreur or client, or boutique or abonnement
-        $productionPanetier = ProductionPanetier::find($distribPanetier->production_panetier_id);
-
-        $shouldIncreaseLivreurCompte = $data['nombre_pain'] > $distribPanetier->nombre_pain  ;
-        $nombreToIncrease = $shouldIncreaseLivreurCompte ? $data['nombre_pain'] - $distribPanetier->nombre_pain : 0;
-        $shouldDecreaseLivreurCompte = $data['nombre_pain'] < $distribPanetier->nombre_pain;
-        $nombreToDecrease = $shouldDecreaseLivreurCompte ? $distribPanetier->nombre_pain - $data['nombre_pain'] : 0;
-       $diff = $nombreToIncrease - $nombreToDecrease;
-        $distribPanetier->update($data);
-        if ($distribPanetier->isForClient()) {
-            $client = Client::find($distribPanetier->client_id);
-            $compte_client = $client->compteClient;
-            $compte_client->solde_pain += $diff;
-            $compte_client->dette = $compte_client->dette + ($diff *
-                    $productionPanetier->prix_pain_client);
-            $compte_client->save();
-        }
-        if ($distribPanetier->isForLivreur()) {
-
-            $livreur = Livreur::find($distribPanetier->livreur_id);
-            $compte_livreur = $livreur->compteLivreur;
-            if ($shouldIncreaseLivreurCompte) {
-                $compte_livreur->augmenterSoldePain($nombreToIncrease);
-                $compte_livreur->dette = $compte_livreur->dette + ($nombreToIncrease *
-                        $productionPanetier->prix_pain_livreur);
-            } else if ($shouldDecreaseLivreurCompte) {
-                $compte_livreur->diminuerSoldePain($nombreToDecrease);
-                $compte_livreur->dette = $compte_livreur->dette - ($nombreToDecrease *
-                        $productionPanetier->prix_pain_livreur);
-            }
-            $compte_livreur->save();
-        }
-        if ($distribPanetier->isForBoutique()) {
-            $boutique = Boutique::find($distribPanetier->boutique_id);
-            $boutique->solde_pain += $diff;
-            $boutique->save();
-        }
-        if ($distribPanetier->isForAbonnement()) {
-            $abonnement = Abonnement::find($distribPanetier->abonnement_id);
-            $abonnement->solde_pain += $diff;
-            $abonnement->dette = $abonnement->dette + ($diff *
-                    $productionPanetier->prix_pain_client);
-            $abonnement->save();
-        }
-        return response()->json($distribPanetier);
-    }
 
     public function destroy(DistribPanetier $distribPanetier)
     {
@@ -3510,35 +4119,64 @@ class DistribPanetierController extends Controller
         return response()->json($distribPanetier);
     }
 
-    public function getEntitiesForDistrib(Request $request)
+    public function getEntitiesForDistrib(Request $request, ProductionPanetier $productionPanetier)
     {
         $boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
 
-        $clients = Client::whereBoulangerieId($boulangerie_id)->get()->map(function (Client $client){
-            return [
+        $clients = Client::whereBoulangerieId($boulangerie_id)->get()->map(function (Client $client) use ($productionPanetier) {
+            $data = [
                 'id' => $client->id,
                 'nom' => $client->identifier()
+
             ];
+            $distribClient = $productionPanetier->distribPanetiers()->whereClientId($client->id)->first();
+            if ($distribClient) {
+                $data['nombre_pain'] = $distribClient->nombre_pain;
+                $data['bonus'] = $distribClient->bonus;
+            }
+            return $data;
         });
         $livreurs = Livreur::whereBoulangerieId($boulangerie_id)->whereIsActive(true)
-            ->get()->map(function (Livreur $livreur){
-                return [
+            ->get()->map(function (Livreur $livreur) use ($productionPanetier) {
+                $data = [
                     'id' => $livreur->id,
-                    'nom' => $livreur->identifier(),
+                    'nom' => $livreur->identifier()
                 ];
-            })
-        ;
-        $abonnements = Abonnement::whereHas("client",function ($query) use ($boulangerie_id){
-            $query->where("boulangerie_id",$boulangerie_id);
+                $distribLivreur = $productionPanetier->distribPanetiers()->whereLivreurId($livreur->id)->first();
+                if ($distribLivreur) {
+                    $data['nombre_pain'] = $distribLivreur->nombre_pain;
+                    $data['bonus'] = $distribLivreur->bonus;
+                }
+                return $data;
+            });
+        $abonnements = Abonnement::whereHas("client", function ($query) use ($boulangerie_id) {
+            $query->where("boulangerie_id", $boulangerie_id);
 
-        })->get()->map(function (Abonnement $abonnement){
-            return [
+        })->get()->map(function (Abonnement $abonnement) use ($productionPanetier) {
+            $data = [
                 'id' => $abonnement->id,
-                'nom' => $abonnement->identifier(),
+                'nom' => $abonnement->identifier()
             ];
+            $distribAbonnement = $productionPanetier->distribPanetiers()->whereAbonnementId($abonnement->id)->first();
+            if ($distribAbonnement) {
+                $data['nombre_pain'] = $distribAbonnement->nombre_pain;
+                $data['bonus'] = $distribAbonnement->bonus;
+            }
+            return $data;
         });
         $boutiques = Boutique::whereBoulangerieId($boulangerie_id)->orderBy('id')
-            ->get(['id', 'nom']);
+            ->get(['id', 'nom'])->map(function (Boutique $boutique) use ($productionPanetier) {
+                $data = [
+                    'id' => $boutique->id,
+                    'nom' => $boutique->nom
+                ];
+                $distribBoutique = $productionPanetier->distribPanetiers()->whereBoutiqueId($boutique->id)->first();
+                if ($distribBoutique) {
+                    $data['nombre_pain'] = $distribBoutique->nombre_pain;
+                    $data['bonus'] = $distribBoutique->bonus;
+                }
+                return $data;
+            });
 
         return response()->json([
             'clients' => $clients,
@@ -3655,6 +4293,8 @@ LivreurController.php
 namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
+use App\Models\DistribPanetier;
+use App\Models\Versement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Models\Livreur;
@@ -3668,7 +4308,21 @@ class LivreurController extends Controller
     public function index()
     {
         $livreurs = Livreur::whereBoulangerieId(Boulangerie::requireBoulangerieOfLoggedInUser()->id)->whereIsActive
-        (true)->get();
+        (true)->get()->map(function ($livreur) {
+            return [
+                'id' => $livreur->id,
+                'prenom' => $livreur->prenom,
+                'nom' => $livreur->nom,
+                'telephone' => $livreur->telephone,
+                'prix_pain' => $livreur->prix_pain,
+                'is_active' => (bool)$livreur->is_active,
+                'identifier' => $livreur->identifier(),
+                'solde_reliquat' => $livreur->compteLivreur->solde_reliquat,
+                'solde_pain' => $livreur->compteLivreur->solde_pain,
+                'dette' => $livreur->compteLivreur->dette,
+
+            ];
+        });
         return response()->json($livreurs);
     }
 
@@ -3742,6 +4396,78 @@ class LivreurController extends Controller
 
         $livreur->update(['is_active' => $is_active]);
         return response()->json(['message' => 'Livreur disabled successfully']);
+    }
+
+    public function historique(Livreur $livreur)
+    {
+        // Get the distribPanetiers related to the current livreur
+        $distribPanetiers = DistribPanetier::select([
+            'nombre_pain','created_at','bonus'
+        ])->with('productionPanetier')
+            ->where('livreur_id', $livreur->id)
+            ->get();
+
+        // Get the versements related to the current livreur
+        $versements = Versement::select(['montant_verse','date_versement','nombre_retour'])->where('livreur_id',
+            $livreur->id)
+            ->get();
+
+        // Calculate the total pain taken
+        $totalPainTaken = $distribPanetiers->sum('nombre_pain');
+
+        // Calculate the total amount of versements
+        $totalVersements = $versements->sum('montant_verse');
+
+        // Calculate solde reliquat and solde pain
+        $soldeReliquat = $livreur->compteLivreur->solde_reliquat;
+        $soldePain = $livreur->compteLivreur->solde_pain;
+
+        return response()->json([
+            'distribPanetiers' => $distribPanetiers,
+            'versements' => $versements,
+            'totalPainTaken' => $totalPainTaken,
+            'totalVersements' => $totalVersements,
+            'soldeReliquat' => $soldeReliquat,
+            "dette"=> $soldePain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur,
+            'soldePain' => $soldePain,
+        ]);
+    }
+
+    // get list of 30 distrib_panetiers of livreurs
+    public function getDistribPanetiersOfLivreurs(Livreur $livreur)
+    {
+        $totals = [
+            "valeur_pain" => $livreur->compteLivreur->dette,
+            "solde_reliquat" => $livreur->compteLivreur->solde_reliquat,
+            "solde_pain" => $livreur->compteLivreur->solde_pain,
+        ];
+
+        $distribPanetiers = DistribPanetier::where('livreur_id', $livreur->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(30)
+            ->get()->map(function (DistribPanetier $distribPanetier) use ($livreur) {
+                return [
+                    'id' => $distribPanetier->id,
+                    'nombre_pain' => $distribPanetier->nombre_pain,
+                    "nombre_retour" => $distribPanetier->nombre_retour,
+                    "valeur_pain" => $distribPanetier->valeurPain(),
+                    'prix_pain' => $livreur->prix_pain,
+                    'created_at' => $distribPanetier->created_at,
+                    'montant_verse'=> $distribPanetier->versement !== null ? $distribPanetier->versement->montant_verse : 0,
+                    'reliquat'=> $distribPanetier->versement !== null ? $distribPanetier->versement->reliquat : 0,
+                    'bonus' => $distribPanetier->bonus,
+                    'verse'=> $distribPanetier->versement !== null,
+                    'date_production_panetier' => $distribPanetier->productionPanetier->date_production,
+                    'periode' => $distribPanetier->productionPanetier->periode,
+                    "identifier"=>"Lot pains du ".$distribPanetier->productionPanetier->identifier(),
+                    'production_panetier' => $distribPanetier->productionPanetier->id,
+                ];
+            });
+        return response()->json([
+            'distribPanetiers' => $distribPanetiers,
+            'totals' => $totals,
+        ]);
+
     }
 }
 
@@ -3827,6 +4553,7 @@ class PanetierController extends Controller
     public function show(ProductionPanetier $productionPanetier)
     {
         $productionPanetier->load('chariots');
+        $productionPanetier->load('productionPetrisseur');
 
         $livreurs = $productionPanetier->distribPanetiers()->whereNotNull('livreur_id')->get();
         $clients = $productionPanetier->distribPanetiers()->whereNotNull('client_id')->get();
@@ -3865,7 +4592,10 @@ class PetrisseurController extends Controller
     // enregistre production petrisseur
     public function index()
     {
-        $productions = ProductionPetrisseur::ofCurrentBoulangerie()->orderByDesc('date_production')->limit(30)->get();
+        $productions = ProductionPetrisseur::ofCurrentBoulangerie()
+            ->with('prodPanetier')
+            ->orderByDesc('date_production')->limit(30)
+            ->get();
         return response()->json($productions);
     }
     public function productionDuJour($date)
@@ -3971,6 +4701,7 @@ ProdPatisserieController.php
 
 namespace App\Http\Controllers;
 
+use App\Models\Article;
 use App\Models\Caisse;
 use App\Models\ProdPatisserie;
 use App\Models\ArticleProdPatisserie;
@@ -3982,6 +4713,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 class ProdPatisserieController extends Controller
 {
@@ -3998,9 +4731,21 @@ class ProdPatisserieController extends Controller
     // get prod patisserie of a specific date
     public function getProdPatisserieByDate(Request $request, $date)
     {
-        $prodPatisseries = ProdPatisserie::where('date_production', $date)
-            ->orderByDesc('created_at')
-            ->get();
+        $prodPatisseries = ProdPatisserie::whereDate('date_production', '<=',$date)
+            ->orderByDesc('date_production')
+            ->limit(31)
+            ->get()->map(function ($prodPatisserie) {
+                return [
+                    'id' => $prodPatisserie->id,
+                    'periode' => $prodPatisserie->periode,
+                    'date_production' => $prodPatisserie->date_production,
+                    'verse' => (bool)$prodPatisserie->verse,
+                    'montant_a_verser' => $prodPatisserie->montant_a_verser,
+                    'restant_transfere' => (bool)$prodPatisserie->restant_transfere,
+                    'nombre_a_verser' => $prodPatisserie->nombre_a_verser,
+                    'articles' => [],
+                ];
+            });
         return response()->json($prodPatisseries);
     }
 
@@ -4008,6 +4753,8 @@ class ProdPatisserieController extends Controller
      *
      * @param Request $request
      * @return JsonResponse
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     public function store(Request $request)
     {
@@ -4019,18 +4766,23 @@ class ProdPatisserieController extends Controller
                 Rule::unique('prod_patisseries')
                     ->where(function ($query) {
                         return $query
-                            ->where('periode', request('periode'))
+//                            ->where('periode', request('periode'))
                             ->where('date_production', request('date_production'));
                     }) ],
-
-            'periode' => 'in:matin,soir'
         ], [
-            'date_production.unique' => 'On a déjà une production pour cette date et cette période'
+            'date_production.unique' => 'Cette date est déjà enregistrée',
         ]);
 
         $prodPatisserie = new ProdPatisserie($validatedData);
         $prodPatisserie->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        $prodPatisserie->periode ='matin';
+
+        $prodPatisserieSoir = clone $prodPatisserie;
+        $prodPatisserieSoir->periode = 'soir';
         $prodPatisserie->save();
+        $prodPatisserieSoir->save();
+
+
 
         return response()->json($prodPatisserie, 201);
     }
@@ -4124,6 +4876,7 @@ class ProdPatisserieController extends Controller
                 'quantite' => $articleProdPatisserie->quantite,
                 'restant' => $articleProdPatisserie->restant,
                 'retour' => $articleProdPatisserie->retour,
+                'article_prix' => $articleProdPatisserie->article->prix,
                 'article_nom' => $articleProdPatisserie->article->nom,
             ];
         });
@@ -4179,15 +4932,33 @@ class ProdPatisserieController extends Controller
     public function encaisserProdPatisserie(Request $request, ProdPatisserie $prodPatisserie)
     {
         $data = $request->validate([
-            'montant' => 'required|numeric'
+            'montant' => 'required|numeric',
+            'articles'=>'required|array',
+            // articles should have id, retour and restant attributes required
+            'articles.*.id' => 'required|exists:article_prod_patisseries,id',
+            'articles.*.article_id' => 'required|exists:articles,id',
+            'articles.*.retour' => 'required|integer|min:0',
+            'articles.*.restant' => 'required|integer|min:0',
         ]);
+
         // create recettes
         DB::transaction(function () use ($data, $prodPatisserie) {
+            // update articles first
+            foreach ($data['articles'] as $articleData) {
+                $articleProdPatisserie = ArticleProdPatisserie::findOrFail($articleData['id']);
+                $articleProdPatisserie->update([
+                    'retour' => $articleData['retour'],
+                    'restant' => $articleData['restant'],
+                ]);
+            }
+
             $recette = new Recette();
             $recette->montant = $data['montant'];
             $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
-            //TODO get type recette id
-            $typeRecette = TypeRecette::firstOrFail();
+
+            $typeRecette = TypeRecette::ofCurrentBoulangerie()
+                ->where('constant_name',TypeRecette::VENTE_PATISSERIE)
+               ->firstOrFail();
             $recette->typeRecette()->associate($typeRecette);
             Carbon::setLocale('fr');
 
@@ -4209,6 +4980,107 @@ class ProdPatisserieController extends Controller
 
 
     }
+
+    public function transfer(ProdPatisserie $prodPatisserie, Request $request)
+    {
+        if ($request->isMethod('get')) {
+            return $this->getTransferData($prodPatisserie);
+        }
+
+        if ($request->isMethod('post')) {
+            return $this->postTransferData($prodPatisserie,$request);
+        }
+
+        return response()->json(['message' => 'Method not allowed'], 405);
+    }
+
+    /**
+     * Get the nearest ProdPatisserie and articles with retour > 0.
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    protected function getTransferData(ProdPatisserie $currentProdPatisserie)
+    {
+        // Find the current ProdPatisserie
+
+        // Fetch the nearest ProdPatisserie (add logic to determine the nearest one)
+        $nearestProdPatisserie = ProdPatisserie::where('date_production', '>=', $currentProdPatisserie->date_production)
+            ->where('id', '>', $currentProdPatisserie->id)
+            ->orderBy('date_production', 'asc')
+            ->first();
+
+        // Fetch articles with retour > 0
+        $articles = $currentProdPatisserie->articles()
+            ->where('restant', '>', 0)
+            ->get()->map(function ($articleProdPatisserie) {
+                return [
+                    'id' => $articleProdPatisserie->id,
+                    'article_id' => $articleProdPatisserie->article_id,
+                    'quantite' => $articleProdPatisserie->quantite,
+                    'retour' => $articleProdPatisserie->retour,
+                    'restant' => $articleProdPatisserie->restant,
+                    'article_prix' => $articleProdPatisserie->article->prix,
+                    'article_nom' => $articleProdPatisserie->article->nom,
+                ];
+            });
+
+        return response()->json([
+            'nearestProdPatisserie' => $nearestProdPatisserie,
+            'articles' => $articles,
+        ]);
+    }
+
+    /**
+     * Handle the transfer of articles to the nearest ProdPatisserie.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    protected function postTransferData(ProdPatisserie $source, Request
+$request)
+    {
+        $validated = $request->validate([
+            'articles' => 'required|array',
+            'articles.*.article_id' => 'required|exists:article_prod_patisseries,id',
+            'destination_prod_patisserie_id' => 'required|exists:prod_patisseries,id',
+        ]);
+        // if already transferred it should fail validation
+        if ($source->restant_transfere) {
+            return response()->json(['message' => 'Articles déjà transféré'], 422);
+        }
+
+            $articlesToTransfer = $source->articles()
+                ->whereIn('id', array_map(function ($article) {
+                    return $article['article_id'];
+                }, $validated['articles']))
+                ->get();
+
+            $destination = ProdPatisserie::findOrFail($validated['destination_prod_patisserie_id']);
+
+            DB::transaction(function () use ($articlesToTransfer, $destination, $source) {
+                foreach ($articlesToTransfer as $article) {
+                    $destination->articles()->create(
+                        [   'article_id' => $article->article_id,
+                            'quantite' => $article->restant,
+                            'retour' => 0,
+                            'restant' => 0,
+                        ]
+                    );
+                }
+                $source->restant_transfere = true;
+                $source->save();
+            });
+
+
+
+            // Here you could create a record that logs the transfer or perform any additional logic
+
+
+        return response()->json(['message' => 'Articles transferred successfully']);
+    }
+
+
 
 }
 
@@ -4283,7 +5155,6 @@ class RecetteController extends Controller
         $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
         DB::transaction(function () use ($recette) {
             $recette->save();
-            // TODO: check the right caisse
             $caisse = Caisse::requireCaisseOfLoggedInUser();
             $caisse->augmenterSolde($recette->montant);
         });
@@ -4348,7 +5219,6 @@ class RecetteController extends Controller
     {
         DB::transaction(function () use ($recette) {
             $recette->delete();
-            // TODO: check the right caisse
             $caisse = Caisse::requireCaisseOfLoggedInUser();
             $caisse->diminuerSolde($recette->montant);
         });
@@ -4515,7 +5385,9 @@ use App\Models\Boutique;
 use App\Models\Caisse;
 use App\Models\Client;
 use App\Models\CompteLivreur;
+use App\Models\DistribPanetier;
 use App\Models\Livreur;
+use App\Models\TypeRecette;
 use App\Models\Versement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -4532,17 +5404,20 @@ class VersementController extends Controller
         $data = $request->validate([
             'montant' => 'required|numeric',
             'nombre_retour' => 'required|integer',
-            'nombre_pain_matin' => 'required|integer',
+            'nombre_pain_matin' => 'integer',
             "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
-            "date_versement"=>"required|date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
+//            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
             'livreur_id' => 'integer|exists:livreurs,id',
             'client_id' => 'integer|exists:clients,id',
             'abonnement_id' => 'integer|exists:abonnements,id',
             'boutique_id' => 'integer|exists:boutiques,id',
+            'distrib_panetier_id'=>'integer|exists:distrib_panetiers,id',
         ]);
         if (!isset($data['caisse_id'])){
             $data['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
         }
+
+
         // if neither livreur_id, client_id, abonnement_id, boutique_id is set, then it's a 422 error
         if (!isset($data['livreur_id']) && !isset($data['client_id']) && !isset($data['abonnement_id']) && !isset($data['boutique_id'])){
             return response()->json(['message' => 'Vous devez choisir un livreur, un client, un abonnement ou une 
@@ -4552,34 +5427,45 @@ class VersementController extends Controller
         $montant_verse = $data['montant'];
 
         DB::transaction(function () use ($data, $versement, $montant_verse) {
+            $distrib_panetier = DistribPanetier::findOrFail($data['distrib_panetier_id']);
+            $distrib_panetier->nombre_retour = $data['nombre_retour'];
 
-        $versement->montant_verse = $data['montant'];
+            $versement->montant_verse = $data['montant'];
         $versement->nombre_retour = $data['nombre_retour'];
-        $versement->date_versement = $data['date_versement'];
+        $versement->date_versement = today()->toDateString();
 
         $versement->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
         if ($versement->isForLivreur()){
             $livreur = Livreur::findOrFail($data['livreur_id']);
             $versement->livreur()->associate($livreur);
 
+
+
             // vérifier le montant versé par le livreur pour savoir s'il doit de l'argent ou on doit réduire son solde reliquat
             $compte_livreur = $livreur->compteLivreur;
-            $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $data['nombre_retour'];
-            $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
+            $compte_data = $compte_livreur->toArray();
+            $nombre_pain_a_comptabiliser = $distrib_panetier->nombre_pain - $data['nombre_retour'];
+            $montant_a_verser = $distrib_panetier->valeurPain();
             $montant_verse = $data['montant'];
+
 
             if ($montant_verse > $montant_a_verser) {
                 $compte_livreur->solde_reliquat -= ($montant_verse - $montant_a_verser);
             }elseif ($montant_verse < $montant_a_verser){
                 $compte_livreur->solde_reliquat += ($montant_a_verser - $montant_verse);
+            }else if ($montant_verse == $montant_a_verser){
+                $compte_livreur->solde_reliquat = 0;
+
             }
-            $compte_data = $compte_livreur->toArray();
             $versement->compte_data = $compte_data;
             $versement->save();
 
             $compte_livreur->dette = 0;
             $compte_livreur->solde_pain = 0;
             $compte_livreur->save();
+
+            //save distrib panetier
+
         }elseif ($versement->isForClient()) {
             $versement->client()->associate(Client::find($data['client_id']));
             $compte_client = $versement->client->compteClient;
@@ -4602,28 +5488,26 @@ class VersementController extends Controller
         $caisse = Caisse::find($data['caisse_id']);
         $caisse->augmenterSolde($montant_verse);
 
-            $identifier = '';
+            $identifier = $versement->identifier();
 
-            if ($versement->isForLivreur()) {
-                $identifier = $versement->livreur->identifier();
-            } elseif ($versement->isForClient()) {
-                $identifier = $versement->client->identifier();
-            } elseif ($versement->isForBoutique()) {
-                $identifier = $versement->boutique->identifier();
-            } else if ($versement->isForAbonnement()) {
-                $identifier = $versement->abonnement->identifier();
-            }
+
 
 // Create the recette with the determined identifier
            $caisse->recettes()->create([
                 'montant' => $montant_verse,
-                // TODO get type recette id later
-                'type_recette_id' => 1,
+
+                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
+                        TypeRecette::VERSEMENT_LIVREUR)
+                    ->firstOrFail()->id,
                 'commentaire' => 'Versement de ' . $identifier,
                 'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
             ]);
+            $distrib_panetier->versement()->associate($versement);
+            $distrib_panetier->save();
+
 
         });
+
 
 
         return response()->json($versement, 201);
@@ -4685,8 +5569,6 @@ class VersementController extends Controller
             $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $versement->nombre_retour;
             $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
             $montant_verse = $versement->montant_verse;
-
-            // TODO recalculer reliquat
             $compte_livreur->save();
             /** @var  $caisse Caisse */
             $caisse = Caisse::find($versement->caisse_id);
@@ -4740,6 +5622,49 @@ class VersementController extends Controller
             'abonnements' => VersementResource::collection($abonnements),
             'boutiques' => VersementResource::collection($boutiques),
         ]);
+    }
+    public function destinations()
+    {
+        $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
+        $livreurs = $boulangerie->livreurs()->where('is_active',true)->get();
+        $clients = $boulangerie->clients;
+        $abonnements = $boulangerie->abonnements;
+        $boutiques = $boulangerie->boutiques;
+        return response()->json([
+            'livreurs' => $livreurs->map(function (Livreur $livreur){
+                return [
+                    'id' => $livreur->id,
+                    'nom' => $livreur->identifier(),
+                    'solde_pain' => $livreur->compteLivreur->solde_pain,
+                    'solde_reliquat' => $livreur->compteLivreur->solde_reliquat,
+                    'dette' => $livreur->compteLivreur->dette,
+                ];
+            }),
+            'clients' => $clients->map(function (Client $client){
+                return [
+                    'id' => $client->id,
+                    'nom' => $client->nom,
+                    'solde_pain' => $client->compteClient->solde_pain,
+                    'dette' => $client->compteClient->dette,
+                ];
+            }),
+            'abonnements' => $abonnements->map(function (Abonnement $abonnement){
+                return [
+                    'id' => $abonnement->id,
+                    'nom' => $abonnement->identifier(),
+                    'solde_pain' => $abonnement->solde_pain,
+                    'dette' => $abonnement->dette,
+                ];
+            }),
+            'boutiques' => $boutiques->map(function (Boutique $boutique){
+                return [
+                    'id' => $boutique->id,
+                    'nom' => $boutique->identifier(),
+                    'solde_pain' => $boutique->solde_pain,
+                ];
+            }),
+        ]);
+
     }
 }
 

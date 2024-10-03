@@ -18,6 +18,7 @@ use App\Models\Intrant;
 use App\Models\Livreur;
 use App\Models\MouveIntrant;
 use App\Models\ProdPatisserie;
+use App\Models\ProductionPetrisseur;
 use App\Models\Recette;
 use App\Models\StockIntrant;
 use App\Models\TypeDepense;
@@ -26,6 +27,8 @@ use App\Models\User;
 use App\Models\Versement;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 /** @noinspection PhpUnused */
 
@@ -38,6 +41,11 @@ class ProductionSeeder extends Seeder
     {
         Artisan::call('db:wipe', ['--force' => true]);
         Artisan::call('migrate', ['--force' => true]);
+        $user = User::create([
+            'name' => 'Admin',
+            'phone_number' => 773300853,
+            'password'=>Hash::make('0000'),
+            'email' => 'email@gmail.com',]);
         // run company seeder
         $company = Company::create([
             'nom' => 'Boulangerie Groupe Sokhna Aida']);
@@ -74,13 +82,12 @@ class ProductionSeeder extends Seeder
 
             // clients
             $type_recettes = [
-                ['nom' => 'Vente Patisserie', 'constant_name' => 'vente_patisserie'],
-                ['nom' => 'Versement Livreur', 'constant_name' => 'versement_livreur'],
-                ['nom' => 'Versement Client', 'constant_name' => 'versement_client'],
-                ['nom' => 'Vente Pain', 'constant_name' => 'vente_pain'],
-                ['nom' => 'Paiement Abonnement', 'constant_name' => 'paiement_abonnement'],
-                ['nom' => 'Vente Boutique', 'constant_name' => 'vente_boutique'],
-                ['nom' => 'Vente de restants', 'constant_name' => 'vente_de_restants'],
+                ['nom' => 'Vente Patisserie', 'constant_name' => TypeRecette::VENTE_PATISSERIE],
+                ['nom' => 'Versement Livreur', 'constant_name' => TypeRecette::VERSEMENT_LIVREUR],
+                ['nom' => 'Versement Client', 'constant_name' => TypeRecette::VERSEMENT_CLIENT],
+                ['nom' => 'Paiement Abonnement', 'constant_name' => TypeRecette::VERSEMENT_ABONNEMENT],
+                ['nom' => 'Vente Boutique', 'constant_name' => TypeRecette::VERSEMENT_BOUTIQUE],
+                ['nom' => 'Vente de restants', 'constant_name' => TypeRecette::VENTE_RESTANT],
                 ['nom' => 'Autres recettes', 'constant_name' => 'autres_recettes']
             ];
 
@@ -212,6 +219,169 @@ class ProductionSeeder extends Seeder
                 ];
             })->toArray());
         }
+        $boulangerieFirst = Boulangerie::first();
+        $productionPetrisseur = new ProductionPetrisseur();
+        $productionPetrisseur->date_production = '2024-09-22';
+        $productionPetrisseur->boulangerie_id = $boulangerieFirst->id;
+
+
+        /*DB::table('distrib_panetiers')->insert([
+            [
+                'id' => 10,
+                'nombre_pain' => 900,
+                'bonus' => 0,
+                'livreur_id' => 1,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => 1,
+                'nombre_retour' => 23,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:39:53',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 11,
+                'nombre_pain' => 1060,
+                'bonus' => 0,
+                'livreur_id' => 2,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 12,
+                'nombre_pain' => 35,
+                'bonus' => 0,
+                'livreur_id' => 3,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 13,
+                'nombre_pain' => 1025,
+                'bonus' => 0,
+                'livreur_id' => 4,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 14,
+                'nombre_pain' => 24,
+                'bonus' => 0,
+                'livreur_id' => 5,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 15,
+                'nombre_pain' => 700,
+                'bonus' => 0,
+                'livreur_id' => 6,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 16,
+                'nombre_pain' => 1130,
+                'bonus' => 0,
+                'livreur_id' => 7,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 17,
+                'nombre_pain' => 50,
+                'bonus' => 0,
+                'livreur_id' => 8,
+                'client_id' => null,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 18,
+                'nombre_pain' => 10,
+                'bonus' => null,
+                'livreur_id' => null,
+                'client_id' => 1,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 19,
+                'nombre_pain' => 20,
+                'bonus' => null,
+                'livreur_id' => null,
+                'client_id' => 2,
+                'boutique_id' => null,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+            [
+                'id' => 20,
+                'nombre_pain' => 364,
+                'bonus' => null,
+                'livreur_id' => null,
+                'client_id' => null,
+                'boutique_id' => 1,
+                'abonnement_id' => null,
+                'versement_id' => null,
+                'nombre_retour' => 0,
+                'created_at' => '2024-09-22 20:36:03',
+                'updated_at' => '2024-09-22 20:36:03',
+                'production_panetier_id' => 1,
+            ],
+        ]);*/
+
 
 
         print "Database seeded successfully\n";

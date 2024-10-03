@@ -33,15 +33,13 @@ class ProductionPetrisseur extends Model
     public function totalPain() : int
     {
 
-        $chariotsNombrePainMultiplied = $this->chariots->map(function ($chariot) {
-            return $chariot->nombre * $chariot->chariot->nombre_pain;
+        $chariotsNombrePainMultiplied = $this->chariots->map(function ($chariotProd) {
+            $chariotProd->load('chariot');
+            return $chariotProd->nombre * $chariotProd->chariot->nombre_pain;
         });
         $totalPain = $chariotsNombrePainMultiplied->sum();
-        // TODO check if has moitié
-        if ($this->nombre_pain >10000000000000) {
-            $totalPain += $this->nombre_pain;
-        }
-        return $totalPain;
+
+        return $totalPain + $this->attributes['nombre_plat'];
 
     }
     public function getTotalPainAttribute(): int

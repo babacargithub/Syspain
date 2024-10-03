@@ -11,6 +11,7 @@ use App\Models\Client;
 use App\Models\CompteLivreur;
 use App\Models\DistribPanetier;
 use App\Models\Livreur;
+use App\Models\TypeRecette;
 use App\Models\Versement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -118,8 +119,10 @@ class VersementController extends Controller
 // Create the recette with the determined identifier
            $caisse->recettes()->create([
                 'montant' => $montant_verse,
-                // TODO get type recette id later
-                'type_recette_id' => 1,
+
+                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
+                        TypeRecette::VERSEMENT_LIVREUR)
+                    ->firstOrFail()->id,
                 'commentaire' => 'Versement de ' . $identifier,
                 'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
             ]);
@@ -190,8 +193,6 @@ class VersementController extends Controller
             $nombre_pain_a_comptabiliser = $compte_livreur->solde_pain - $versement->nombre_retour;
             $montant_a_verser = $nombre_pain_a_comptabiliser * $livreur->prix_pain;
             $montant_verse = $versement->montant_verse;
-
-            // TODO recalculer reliquat
             $compte_livreur->save();
             /** @var  $caisse Caisse */
             $caisse = Caisse::find($versement->caisse_id);

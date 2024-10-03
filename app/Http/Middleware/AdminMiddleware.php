@@ -16,6 +16,9 @@ class AdminMiddleware extends Middleware
      */
     public function handle(Request $request, Closure $next): Response
     {
+        if (!auth()->user()->isAdmin() && !auth()->user()->isSuperAdmin()) {
+            return response()->json(['message' => 'Accès refusé ! Vous devez être admin pour voir cette page'], 403);
+        }
         return $next($request);
     }
 }

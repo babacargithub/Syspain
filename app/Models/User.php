@@ -3,13 +3,18 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+//use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+//use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+//    use CrudTrait;
+//    use HasRoles;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -20,6 +25,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'phone_number',
+        'is_admin',
+        'is_super_admin',
     ];
 
     /**
@@ -42,6 +50,17 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
+            'is_super_admin' => 'boolean',
         ];
+    }
+    public function isSuperAdmin(): bool
+    {
+        return $this->attributes['is_super_admin'];
+
+    }
+    public function isAdmin():bool
+    {
+        return $this->attributes['is_admin'];
     }
 }

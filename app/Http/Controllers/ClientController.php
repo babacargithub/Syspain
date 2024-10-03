@@ -17,7 +17,8 @@ class ClientController extends Controller
      */
     public function index()
     {
-        $clients = Client::all();
+        $clients = Client::with('abonnement')->get();
+
         return response()->json($clients);
     }
 

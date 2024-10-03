@@ -5,6 +5,9 @@ namespace App\Traits;
 use App\Models\Boulangerie;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 
 /**
@@ -23,11 +26,8 @@ trait BoulangerieScope
          * @var $this Model
          */
         static::addGlobalScope('boulangerie', function (Builder $builder) {
-            // TODO change this later
             $builder->where('boulangerie_id', Boulangerie::requireBoulangerieOfLoggedInUser()->id);
-//            if (auth()->check()) {
-//                $builder->where('boulangerie_id', auth()->user()->boulangerie_id);
-//            }
+
         });
     }
 
@@ -36,6 +36,7 @@ trait BoulangerieScope
      *
      * @param Builder $query
      * @return Builder
+     * @throws ContainerExceptionInterface
      */
     public function scopeOfCurrentBoulangerie(Builder $query): Builder
     {

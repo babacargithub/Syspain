@@ -14,6 +14,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Psr\Container\ContainerExceptionInterface;
+use Psr\Container\NotFoundExceptionInterface;
 
 class ProdPatisserieController extends Controller
 {
@@ -52,6 +54,8 @@ class ProdPatisserieController extends Controller
      *
      * @param Request $request
      * @return JsonResponse
+     * @throws ContainerExceptionInterface
+     * @throws NotFoundExceptionInterface
      */
     public function store(Request $request)
     {
@@ -63,18 +67,23 @@ class ProdPatisserieController extends Controller
                 Rule::unique('prod_patisseries')
                     ->where(function ($query) {
                         return $query
-                            ->where('periode', request('periode'))
+//                            ->where('periode', request('periode'))
                             ->where('date_production', request('date_production'));
                     }) ],
-            // TODO remove later
-            'periode' => 'in:matin,soir'
         ], [
-            'date_production.unique' => 'On a déjà une production pour cette date et cette période'
+            'date_production.unique' => 'Cette date est déjà enregistrée',
         ]);
 
         $prodPatisserie = new ProdPatisserie($validatedData);
         $prodPatisserie->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        $prodPatisserie->periode ='matin';
+
+        $prodPatisserieSoir = clone $prodPatisserie;
+        $prodPatisserieSoir->periode = 'soir';
         $prodPatisserie->save();
+        $prodPatisserieSoir->save();
+
+
 
         return response()->json($prodPatisserie, 201);
     }
@@ -247,8 +256,10 @@ class ProdPatisserieController extends Controller
             $recette = new Recette();
             $recette->montant = $data['montant'];
             $recette->boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
-            //TODO get type recette id
-            $typeRecette = TypeRecette::firstOrFail();
+
+            $typeRecette = TypeRecette::ofCurrentBoulangerie()
+                ->where('constant_name',TypeRecette::VENTE_PATISSERIE)
+               ->firstOrFail();
             $recette->typeRecette()->associate($typeRecette);
             Carbon::setLocale('fr');
 

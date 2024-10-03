@@ -23,12 +23,8 @@ class Caisse extends Model
 
     public static function requireCaisseOfLoggedInUser(): Caisse
     {
-        // TODO implement this method
         $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
-        return Caisse::firstOrCreate([
-            "nom" => "Caisse Principale ",
-            "boulangerie_id" => $boulangerie->id
-        ]);
+        return $boulangerie->caisses()->firstOrFail();
     }
 
     public function boulangerie(): BelongsTo
