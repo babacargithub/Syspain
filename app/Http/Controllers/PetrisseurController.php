@@ -54,13 +54,13 @@ class PetrisseurController extends Controller
             // date production should be unique for a boulangerie_id
             'date_production' => 'required|date:Y-m-d|unique:production_petrisseurs,date_production,NULL,id,boulangerie_id,' . Boulangerie::requireBoulangerieOfLoggedInUser()->id,
             'nombre_chariot' => 'integer',
-            'nombre_sac'  => 'required|integer', // 'nombre_sac' => 'required|integer
+            'nombre_sac'  => 'required|numeric', // 'nombre_sac' => 'required|integer
             'nombre_plat'  => 'required|integer',
             'nombre_pain'  => 'integer',
             "rendement" => 'integer',
             "chariots" => 'required|array',
         ], [
-            'date_production.unique' => 'La production de cette date a déjà été enregistrée',
+            'date_production.unique' => 'La production de cette date a déjà été crée',
         ]);
         $production = new ProductionPetrisseur($data);
 
@@ -95,7 +95,7 @@ class PetrisseurController extends Controller
         $data = $request->validate([
             'date_production' => 'date',
             'nombre_chariot' => 'integer',
-            'nombre_sac'  => 'integer',
+            'nombre_sac'  => 'numeric',
             'nombre_plat'  => 'integer',
             'rendement'  => 'integer',
             'nombre_pain'  => 'integer',

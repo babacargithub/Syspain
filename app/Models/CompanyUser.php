@@ -22,4 +22,8 @@ class CompanyUser extends Model
     {
         return $this->belongsTo(User::class);
     }
+    public function boulangerie(): BelongsTo
+    {
+        return $this->belongsTo(Boulangerie::class);
+    }
 }

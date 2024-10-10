@@ -21,7 +21,7 @@ class Recette extends Model
 
     public function identifier(): string
     {
-        return "Recette : {$this->typeRecette->nom}";
+        return "{$this->typeRecette->nom}";
 
     }
     public function getIdentifierAttribute(): string

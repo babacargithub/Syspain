@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
 use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\CompteLivreur;
 use App\Models\Depense;
 use App\Models\DistribPanetier;
@@ -11,11 +12,14 @@ use App\Models\ProductionPetrisseur;
 use App\Models\Recette;
 use App\Models\StockIntrant;
 use App\Models\TypeRecette;
+use App\Models\User;
 use App\Models\Versement;
 use App\Traits\BoulangerieScope;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class AdminController extends Controller
 {
@@ -115,5 +119,77 @@ $total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
 
         return response()->json($totals);
 
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function getUsersAndBoulangeries(Request $request)
+    {
+        $company = Company::requireCompanyOfLoggedInUser();
+        $users = $company->users;
+        $boulangeries = $company->boulangeries;
+        return response()->json([
+            'users' => $users->map(function (CompanyUser $companyUser) {
+                return [
+                    'id' => $companyUser->user->id,
+                    'name' => $companyUser->user->name,
+                    'phone_number' => $companyUser->user->phone_number,
+                    'is_admin' => $companyUser->user->is_admin,
+                ];
+            }),
+            'boulangeries' => $boulangeries->map(function (Boulangerie $boulangerie) {
+                return [
+                    'id' => $boulangerie->id,
+                    'nom' => $boulangerie->nom
+                ];
+            }),
+        ]);
+    }
+    public function createUser(Request $request)
+    {
+        if (! $request->user()->isSuperAdmin()){
+            return response()->json(['message' => 'Vous n\'avez pas les droits pour effectuer cette action'], 422);
+        }
+        $data = $request->validate([
+            'name' => 'required|string',
+            'phone_number' => 'required|unique:users,phone_number',
+            'password' => 'required|string|min:4',
+            'boulangerie_id' => 'required|exists:boulangeries,id'
+        ]);
+
+        $user = new User();
+        $user->name = $data['name'];
+        $user->phone_number = $data['phone_number'];
+        $user->password = Hash::make($data['password']);
+        $user->email = 'user'.$data['phone_number'] . '@sypain.com';
+        DB::transaction(function () use ($user, $data) {
+            $user->save();
+            // create company user
+            $companyUser = new CompanyUser();
+            $companyUser->user_id = $user->id;
+            $companyUser->company_id = Company::requireCompanyOfLoggedInUser()->id;
+            $companyUser->boulangerie_id = $data['boulangerie_id'];
+            $companyUser->save();
+
+        });
+
+        return response()->json($user, 201);
+    }
+
+    public function updateUser(Request $request, User $user)
+    {
+        $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'boulangerie_id' => 'required|exists:boulangeries,id'
+        ]);
+
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->boulangerie_id = $request->boulangerie_id;
+        $user->save();
+
+        return response()->json($user, 200);
     }
 }

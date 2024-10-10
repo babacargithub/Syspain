@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\Middleware;
 use Symfony\Component\HttpFoundation\Response;
 
-class AdminMiddleware extends Middleware
+class AdminMiddleware
 {
     /**
      * Handle an incoming request.
@@ -16,8 +16,13 @@ class AdminMiddleware extends Middleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!auth()->user()->isAdmin() && !auth()->user()->isSuperAdmin()) {
-            return response()->json(['message' => 'Accès refusé ! Vous devez être admin pour voir cette page'], 403);
+
+       // check if route starts with api/admin
+        if ( \Str::startsWith($request->path(), 'api/admin') ) {
+
+            if ($request->user() != null && !$request->user()->isAdmin() && !$request->user()->isSuperAdmin()) {
+                return response()->json(['message' => 'Accès refusé ! Vous devez être admin pour voir cette page'], 403);
+            }
         }
         return $next($request);
     }

@@ -41,11 +41,15 @@ class Boulangerie extends Model
             }else{
                 // get company of user
                 $company = CompanyUser::where('user_id',$user->id)->firstOrFail()->company;
-                return $company->boulangeries->firstOrFial();
+                return $company->boulangeries()->firstOrFail();
             }
         }else{
-            // get boulangrie of user
-            return BoulangerieUser::where('user_id',$user->id)->firstOrFail()->boulangerie;
+            // get boulangerie of user
+            $boulangerie = CompanyUser::where('user_id',$user->id)->firstOrFail()->boulangerie;
+            if ($boulangerie === null) {
+                throw new \Exception('Require boulangerie of logged in user failed, User not assigned to a boulangerie');
+            }
+            return $boulangerie;
 
         }
 

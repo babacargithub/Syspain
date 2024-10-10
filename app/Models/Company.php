@@ -31,5 +31,9 @@ class Company extends Model
     {
         return $this->hasMany(Boulangerie::class);
     }
+    public function users(): HasMany
+    {
+        return $this->hasMany(CompanyUser::class);
+    }
 
 }

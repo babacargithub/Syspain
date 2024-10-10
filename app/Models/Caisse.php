@@ -87,5 +87,10 @@ class Caisse extends Model
     {
         return $this->hasMany(Depense::class);
     }
+    public function versementsBanques() : HasMany
+    {
+        return $this->hasMany(VersementBanque::class);
+    }
+
 
 }

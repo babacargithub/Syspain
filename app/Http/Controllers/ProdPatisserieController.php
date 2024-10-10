@@ -308,8 +308,16 @@ class ProdPatisserieController extends Controller
         // Fetch the nearest ProdPatisserie (add logic to determine the nearest one)
         $nearestProdPatisserie = ProdPatisserie::where('date_production', '>=', $currentProdPatisserie->date_production)
             ->where('id', '>', $currentProdPatisserie->id)
-            ->orderBy('date_production', 'asc')
+            ->orderBy('date_production')
             ->first();
+        if ($nearestProdPatisserie != null) {
+            // we check if the periods are different and if the nearest prod patisserie is in the soir period
+            if ($nearestProdPatisserie->date_production == $currentProdPatisserie->date_production) {
+                if ($nearestProdPatisserie->periode == 'matin' && $currentProdPatisserie->periode == 'soir') {
+                    $nearestProdPatisserie = null;
+                }
+            }
+        }
 
         // Fetch articles with retour > 0
         $articles = $currentProdPatisserie->articles()

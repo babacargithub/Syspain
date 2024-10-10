@@ -18,6 +18,8 @@ class Abonnement extends Model
     protected $fillable = [
         'date_debut',
         'date_fin',
+        'client_id',
+
         'type',
         'prix',
     ];
@@ -160,7 +162,7 @@ class Boulangerie extends Model
             }else{
                 // get company of user
                 $company = CompanyUser::where('user_id',$user->id)->firstOrFail()->company;
-                return $company->boulangeries->firstOrFial();
+                return $company->boulangeries()->firstOrFail();
             }
         }else{
             // get boulangrie of user
@@ -367,6 +369,11 @@ class Caisse extends Model
     {
         return $this->hasMany(Depense::class);
     }
+    public function versementsBanques() : HasMany
+    {
+        return $this->hasMany(VersementBanque::class);
+    }
+
 
 }
 
@@ -1166,8 +1173,9 @@ class ProductionPetrisseur extends Model
     public function totalPain() : int
     {
 
-        $chariotsNombrePainMultiplied = $this->chariots->map(function ($chariot) {
-            return $chariot->nombre * $chariot->chariot->nombre_pain;
+        $chariotsNombrePainMultiplied = $this->chariots->map(function ($chariotProd) {
+            $chariotProd->load('chariot');
+            return $chariotProd->nombre * $chariotProd->chariot->nombre_pain;
         });
         $totalPain = $chariotsNombrePainMultiplied->sum();
 
@@ -1231,7 +1239,7 @@ class Recette extends Model
 
     public function identifier(): string
     {
-        return "Recette : {$this->typeRecette->nom}";
+        return "{$this->typeRecette->nom}";
 
     }
     public function getIdentifierAttribute(): string
@@ -1552,6 +1560,31 @@ class Versement extends Model
         return 'Versement';
     }
 
+}
+
+
+VersementBanque.php
+<?php
+
+namespace App\Models;
+
+//use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class VersementBanque extends Model
+{
+//    use HasFactory;
+    protected $fillable = ["montant","banque","caisse_id"];
+    public function caisse(): BelongsTo
+    {
+        return $this->belongsTo(Caisse::class);
+    }
+    public function boulangerie()
+    {
+        return $this->caisse->boulangerie;
+
+    }
 }
 
 
@@ -2927,13 +2960,82 @@ return new class extends Migration
 };
 
 
+2024_10_08_114014_change_column_nombre_sac.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        //
+        Schema::table('production_petrisseurs', function (Blueprint $table) {
+            $table->float('nombre_sac')->change();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        //
+        Schema::table('production_petrisseurs', function (Blueprint $table) {
+            $table->integer('nombre_sac')->change();
+        });
+    }
+};
+
+
+2024_10_08_135009_create_versement_banques_table.php
+<?php
+
+use App\Models\Caisse;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('versement_banques', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+            $table->integer('montant')->nullable(false);
+            $table->string('banque')->nullable(false);
+            $table->foreignIdFor(Caisse::class)->nullable(false);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('versement_banques');
+    }
+};
+
+
 
 Here are my Routes:
 api.php
 <?php
 
+use App\Http\Controllers\AbonnementController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ArticleController;
+use App\Http\Controllers\CaisseController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\DistribPanetierController;
@@ -2944,87 +3046,31 @@ use App\Http\Controllers\IntrantController;
 use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\VersementBanqueController;
 use App\Http\Controllers\VersementController;
 use App\Http\Middleware\AdminMiddleware;
 use App\Models\Caisse;
 use App\Models\Chariot;
-use App\Models\Depense;
+use App\Models\Company;
 use App\Models\TypeDepense;
 use App\Models\TypeRecette;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Route;
 
 // login sections
-function loginResponse(): Illuminate\Http\Response
-{
-    $token = request()->user()->createToken("name", [], Carbon::now()->addDay());
-    $params = [];
-
-    $roles = [];
-//    foreach (request()->user()->roles as $role) {
-//        $roles[] = $role->name;
-//
-//    }
-    $permissions = [];
-    /*foreach (request()->user()->permissions as $permission) {
-        $roles[] = $permission->name;
-
-    }*/
-    $user = request()->user();
-    return response(["token" => $token, "params" => $params,
-        "user" => [
-            "email" => $user->email,
-            "token" => $token->plainTextToken,
-            "tokenExpiresAt" => $token->accessToken->expires_at,
-            "name" => $user->name,
-            "roles" => $roles,
-            "permissions" => $permissions,
-            "isAuthenticated" => true,
-            "isSuperAdmin" => $user->isSuperAdmin(),
-            "is_admin" => $user->isAdmin(),
-        ],
-        "should_change_password" => (Hash::check("0000", $user->password) || Hash::check("1234", $user->password))
-    ]);
-}
-
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-Route::post('/login', function (Request $request) {
-    // Validate phone number and password
-    $credentials = $request->validate([
-        'phone_number' => ['required'], // Expecting phone number instead of email
-        'password' => ['required'],
-    ]);
-
-    // Attempt authentication using phone_number and password
-    if (Auth::attempt(['phone_number' => $credentials['phone_number'], 'password' => $credentials['password']])) {
-
-        // Validate if user is disabled after authentication
-        $request->validate([
-            'phone_number' => [function ($attribute, $value, $fail) {
-                if (request()->user()->disabled) {
-                    $fail("Compte désactivé !");
-                    Auth::logout();
-                }
-            }],
-        ]);
-
-        // Call your login response method
-        return loginResponse();
-
-    } else {
-        // Invalid credentials response
-        return response("Invalid credentials")->setStatusCode(401);
-    }
-});
+Route::post('/login', [UserController::class, 'handleLoginAttempt']);
 
 
 
 
 
 // Protect routes with sanctum middleware
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
     Route::resource('petrisseurs', PetrisseurController::class);
@@ -3049,6 +3095,9 @@ Route::middleware('auth:sanctum')->group(function () {
 // versements d'une date
     Route::get('versements/date/{date}', [VersementController::class, 'versementsDate'])->name('versements.date');
 
+    //================= VERSEMENTS BANQUES
+    Route::resource('versements_banques', VersementBanqueController::class)
+        ->only(['index', 'store', 'destroy']);
 // ============= SECTION LIVREURS ====================
     Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
     Route::get('/livreurs/{livreur}/distribution_panetiers', [LivreurController::class, 'getDistribPanetiersOfLivreurs']);
@@ -3113,18 +3162,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // ================== END SECTION PRODUCTION PATISSERIE ====================
 
+   Route::get('caisses/{dateStart}/{dateEnd?}', [CaisseController::class, 'caisseDate']);
     Route::get('caisse',function (){
 
         $caisse = Caisse::requireCaisseOfLoggedInUser();
         return response()->json(["solde" => $caisse->solde]);
 
     });
+//    ============= ABONNEMENT ===============
+    Route::post('abonnements', [AbonnementController::class, 'store']);
 
 // admin section routes with 'admin' prefix and protected by admin middleware
     Route::prefix('admin')->group(function () {
         Route::get('boulangeries', [AdminController::class, 'boulangeries']);
         Route::post('boulangeries/change_active', [AdminController::class, 'changeActiveBoulangerie']);
-        Route::get('boulangeries/{boulangerie}/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('boulangeries/{boulangerie}/dashboard/{date}', [AdminController::class, 'dashboard']);
     })->middleware(AdminMiddleware::class);
 
 
@@ -3396,11 +3448,29 @@ AbonnementController.php
 
 namespace App\Http\Controllers;
 
+use App\Models\Abonnement;
 use Illuminate\Http\Request;
 
 class AbonnementController extends Controller
 {
     //
+    public function  store(Request $request)
+    {
+        $data = $request->validate([
+            'client_id' => 'required|exists:clients,id|unique:abonnements,client_id',
+
+        ],[
+            'client_id.unique' => 'Ce client a déjà un abonnement'
+        ]);
+
+        $abonnement = new Abonnement($data);
+        $abonnement->client()->associate($data['client_id']);
+        $abonnement->save();
+
+        return response()->json($abonnement);
+
+
+    }
 }
 
 
@@ -3419,7 +3489,9 @@ use App\Models\Recette;
 use App\Models\StockIntrant;
 use App\Models\TypeRecette;
 use App\Models\Versement;
+use App\Traits\BoulangerieScope;
 use Exception;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class AdminController extends Controller
@@ -3450,51 +3522,72 @@ class AdminController extends Controller
         return response()->json('OK');
 
     }
-    public function dashboard(Boulangerie $boulangerie)
+    public function dashboard(Boulangerie $boulangerie, $date)
     {
-        $date = today()->toDateString();
-        $totalProduction = 0;
-        // calculate total production
-        $productions = ProductionPetrisseur::whereBoulangerieId($boulangerie->id)->whereDateProduction($date)
-            ->get();
-        foreach ($productions as $production) {
-            $totalProduction += $production->total_pain;
-
-        }
+        $totalProduction =
+            ProductionPetrisseur::withoutGlobalScope('boulangerie')->whereBoulangerieId($boulangerie->id)
+                ->whereDateProduction($date)
+                ->get()
+            ->sum('total_pain');
+$total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
+    ->whereHas('productionPanetier', function (Builder $query) use ($boulangerie) {
+        $query->withoutGlobalScope('boulangerie')
+            ->where('boulangerie_id', $boulangerie->id);
+    })
+    ->whereDate('created_at', $date)
+    ->whereNull('versement_id')
+    ->sum('nombre_pain');
         $totals = [
-            'versementsJour' => (int)$boulangerie->versements()->whereDate('created_at', today())->sum('montant_verse'),
+            'versementsJour' => (int)$boulangerie->versements()
+                    ->withoutGlobalScope('boulangerie')
+                    ->whereDate('created_at', $date)
+                    ->sum('montant_verse'),
             'totalPain' => (int) $totalProduction,
-            'totalRecettes' => (int)Recette::whereBoulangerieId($boulangerie->id)->whereDate('created_at', today())->sum
-            ('montant'),
-            'totalDepenses' => (int) Depense::whereBoulangerieId($boulangerie->id)->whereDate('created_at', today())
+            'totalRecettes' => (int)Recette::withoutGlobalScope('boulangerie')
+                ->whereBoulangerieId($boulangerie->id)
+                ->whereDate('created_at', $date)
                 ->sum('montant'),
-            'soldeDetteLivreurs' => (int) CompteLivreur::whereHas('livreur', function ($query) use ($boulangerie) {
-                $query->where('boulangerie_id', $boulangerie->id);
-            })->sum('dette'),
-            'soldeReliquatLivreurs' => (int) CompteLivreur::whereHas('livreur', function ($query) use ($boulangerie) {
+            'totalDepenses' => (int) Depense::withoutGlobalScope('boulangerie')
+                    ->whereBoulangerieId($boulangerie->id)
+                    ->whereDate('created_at', $date)
+                     ->sum('montant'),
+            // we get total pain from distribution panetiers that are have no versements and multiple it by prix pain
+            // livreur of the boulangerie
+            'soldeDetteLivreurs' => (int) $total_dette_pain * $boulangerie->prix_pain_livreur,
+            'soldeReliquatLivreurs' => (int) CompteLivreur::withoutGlobalScope('boulangerie')->whereHas('livreur', function ($query) use ($boulangerie) {
                 $query->where('boulangerie_id', $boulangerie->id);
             })->sum('solde_reliquat'),
-            'soldePainLivreurs' => (int) CompteLivreur::whereHas('livreur', function ($query) use ($boulangerie) {
-                $query->where('boulangerie_id', $boulangerie->id);
-            })->sum('solde_pain'),
+            'soldePainLivreurs' => $total_dette_pain,
 //            'totalVentePatisserie' => $boulangerie->ventesPatisserie()->sum('montant'),
 //            'totalVenteBoutiques' => $boulangerie->ventesBoutique()->sum('montant'),
-            'totalVentePatisserie' => Recette::whereBoulangerieId($boulangerie->id)
+            'totalVentePatisserie' => (int)Recette::withoutGlobalScope('boulangerie')->whereBoulangerieId
+            ($boulangerie->id)
                 ->whereDate('created_at', $date)
                 ->whereHas('typeRecette', function ($query) use ($boulangerie) {
-                    $query->whereTypeRecetteId(TypeRecette::whereBoulangerieId($boulangerie->id)->where('constant_name', TypeRecette::VENTE_PATISSERIE)->first()?->id);
+                    $query->whereTypeRecetteId(TypeRecette::withoutGlobalScope('boulangerie')->whereBoulangerieId($boulangerie->id)->where('constant_name', TypeRecette::VENTE_PATISSERIE)->first()?->id);
                 })->sum('montant'),
-            'totalVenteBoutiques' => Versement::whereBoulangerieId($boulangerie->id)->whereDate('created_at', $date)
-                ->whereNotNull('boulangerie_id')->sum('montant_verse'),
-            'totalRetoursPain' => (int) Versement::whereBoulangerieId($boulangerie->id)->whereDate('created_at', $date)
+            'totalVenteBoutiques' => Versement::withoutGlobalScope('boulangerie')
+                ->whereBoulangerieId($boulangerie->id)
+                ->whereDate('created_at', $date)
+                ->whereNotNull('boutique_id')->sum('montant_verse'),
+            'totalRetoursPain' => (int) Versement::withoutGlobalScope('boulangerie')->whereBoulangerieId($boulangerie->id)->whereDate('created_at', $date)
                 ->whereNotNull('nombre_retour')->sum('nombre_retour'),
             //  calculate total stock using total of quantity of intrants and intrant prix_achat
             // the sum should take total quantity of intrant and multiply by prix_achat of Intrant model using the
             // relation
-            "valeurStock" => (int) StockIntrant::select('quantite * prix_achat as total')->whereBoulangerieId($boulangerie->id)->sum('total'),
+            "valeurStock" => (int) StockIntrant::withoutGlobalScope('boulangerie')->whereBoulangerieId($boulangerie->id)
+                ->selectRaw('SUM(quantite * prix_achat) as total')
+                ->where('quantite', '>', 0)
+                ->value('total'),
 
-            'totalVersementsClients' => (int)$boulangerie->versements()->whereNotNull('client_id')->sum('montant_verse'),
-            'totalVersementsLivreurs' => (int) $boulangerie->versements()->whereNotNull('livreur_id')->sum('montant_verse'),
+            'totalVersementsClients' => (int)$boulangerie->versements()->withoutGlobalScope('boulangerie')
+                ->whereNotNull('client_id')
+                ->whereDate('created_at', $date)
+                ->sum('montant_verse'),
+            'totalVersementsLivreurs' => (int) $boulangerie->versements()->withoutGlobalScope('boulangerie')
+                    ->whereNotNull('livreur_id')
+                ->whereDate('created_at', $date)
+                ->sum('montant_verse'),
         ];
 
         return response()->json($totals);
@@ -3603,6 +3696,66 @@ class BoutiqueController extends Controller
 }
 
 
+CaisseController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Caisse;
+use App\Models\Depense;
+use App\Models\TypeDepense;
+use App\Models\TypeRecette;
+use Illuminate\Http\Request;
+
+class CaisseController extends Controller
+{
+    //
+
+    public function index()
+    {
+        return response()->json(Caisse::requireCaisseOfLoggedInUser());
+    }
+
+    public function caisseDate($dateStart,$dateEnd = null)
+    {
+        // this function returns the list of depenses, recettes, versements banques, total depenses, total recettes,
+        // total versements banques, solde initial at the start of day, solde final at the end of day
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        $depenses = $caisse->depenses()->whereDate('created_at',$dateStart)->get();
+        $recettes = $caisse->recettes()->whereDate('created_at',$dateStart)->get();
+        $versementsBanques = $caisse->versementsBanques()->whereDate('created_at',$dateStart)->get();
+        $totalDepenses = $depenses->sum('montant');
+        $totalRecettes = $recettes->sum('montant');
+        $totalVersementsBanques = $versementsBanques->sum('montant');
+        // TODO find a way to track solde initial and solde final
+        $soldeInitial = $caisse->solde;
+        $soldeFinal = $soldeInitial + $totalRecettes - $totalDepenses - $totalVersementsBanques;
+        return response()->json([
+            "typeDepenses"=>TypeDepense::ofCurrentBoulangerie()->get(),
+            "typeRecettes"=>TypeRecette::ofCurrentBoulangerie()->get(),
+            'depenses' => $depenses->map(function (Depense $depense){
+                return [
+                    "id"=>$depense->id,
+                    "depense"=>$depense->typeDepense->nom,
+                    "montant"=>$depense->montant,
+                    "commentaire"=>$depense->commentaire,
+                    "created_at"=>$depense->created_at
+                ];
+            }),
+            'recettes' => $recettes,
+            'versementsBanques' => $versementsBanques,
+            'totalDepenses' => $totalDepenses,
+            'totalRecettes' => $totalRecettes,
+            'totalVersementsBanques' => $totalVersementsBanques,
+            'soldeInitial' => $soldeInitial,
+            'soldeFinal' => $soldeFinal
+        ]);
+
+    }
+}
+
+
 ChariotController.php
 <?php
 
@@ -3636,7 +3789,8 @@ class ClientController extends Controller
      */
     public function index()
     {
-        $clients = Client::all();
+        $clients = Client::with('abonnement')->get();
+
         return response()->json($clients);
     }
 
@@ -4594,7 +4748,8 @@ class PetrisseurController extends Controller
     {
         $productions = ProductionPetrisseur::ofCurrentBoulangerie()
             ->with('prodPanetier')
-            ->orderByDesc('date_production')->limit(30)
+            ->with('chariots.chariot')
+            ->orderByDesc('date_production')->limit(31)
             ->get();
         return response()->json($productions);
     }
@@ -4631,13 +4786,13 @@ class PetrisseurController extends Controller
             // date production should be unique for a boulangerie_id
             'date_production' => 'required|date:Y-m-d|unique:production_petrisseurs,date_production,NULL,id,boulangerie_id,' . Boulangerie::requireBoulangerieOfLoggedInUser()->id,
             'nombre_chariot' => 'integer',
-            'nombre_sac'  => 'required|integer', // 'nombre_sac' => 'required|integer
+            'nombre_sac'  => 'required|numeric', // 'nombre_sac' => 'required|integer
             'nombre_plat'  => 'required|integer',
             'nombre_pain'  => 'integer',
             "rendement" => 'integer',
             "chariots" => 'required|array',
         ], [
-            'date_production.unique' => 'La production de cette date a déjà été enregistrée',
+            'date_production.unique' => 'La production de cette date a déjà été crée',
         ]);
         $production = new ProductionPetrisseur($data);
 
@@ -4672,7 +4827,7 @@ class PetrisseurController extends Controller
         $data = $request->validate([
             'date_production' => 'date',
             'nombre_chariot' => 'integer',
-            'nombre_sac'  => 'integer',
+            'nombre_sac'  => 'numeric',
             'nombre_plat'  => 'integer',
             'rendement'  => 'integer',
             'nombre_pain'  => 'integer',
@@ -5007,8 +5162,16 @@ class ProdPatisserieController extends Controller
         // Fetch the nearest ProdPatisserie (add logic to determine the nearest one)
         $nearestProdPatisserie = ProdPatisserie::where('date_production', '>=', $currentProdPatisserie->date_production)
             ->where('id', '>', $currentProdPatisserie->id)
-            ->orderBy('date_production', 'asc')
+            ->orderBy('date_production')
             ->first();
+        if ($nearestProdPatisserie != null) {
+            // we check if the periods are different and if the nearest prod patisserie is in the soir period
+            if ($nearestProdPatisserie->date_production == $currentProdPatisserie->date_production) {
+                if ($nearestProdPatisserie->periode == 'matin' && $currentProdPatisserie->periode == 'soir') {
+                    $nearestProdPatisserie = null;
+                }
+            }
+        }
 
         // Fetch articles with retour > 0
         $articles = $currentProdPatisserie->articles()
@@ -5369,6 +5532,147 @@ class StockController extends Controller
         return response()->json($movements);
     }
 
+
+}
+
+
+UserController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Company;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+
+class UserController extends Controller
+{
+
+    //
+    /**
+     * @throws Exception
+     */
+    public function handleLoginAttempt (Request $request) {
+        // Validate phone number and password
+        $credentials = $request->validate([
+            'phone_number' => ['required'], // Expecting phone number instead of email
+            'password' => ['required'],
+        ]);
+
+        // Attempt authentication using phone_number and password
+        if (Auth::attempt(['phone_number' => $credentials['phone_number'], 'password' => $credentials['password']])) {
+
+            // Validate if user is disabled after authentication
+            $request->validate([
+                'phone_number' => [function ($attribute, $value, $fail) {
+                    if (request()->user()->disabled) {
+                        $fail("Compte désactivé !");
+                        Auth::logout();
+                    }
+                }],
+            ]);
+
+            // Call your login response method
+            return $this->loginResponse();
+
+        } else {
+            // Invalid credentials response
+            return response("Invalid credentials")->setStatusCode(401);
+        }
+    }
+    /**
+     * @throws Exception
+     */
+    protected function loginResponse(): Response
+{
+    $token = request()->user()->createToken("name", [], Carbon::now()->addDay());
+    $params = [];
+
+    $roles = [];
+//    foreach (request()->user()->roles as $role) {
+//        $roles[] = $role->name;
+//
+//    }
+    $permissions = [];
+    /*foreach (request()->user()->permissions as $permission) {
+        $roles[] = $permission->name;
+
+    }*/
+    $user = request()->user();
+    return response(["token" => $token->plainTextToken,
+        "tokenExpiresAt"=>$token->accessToken->expires_at,
+        "params" => $params,
+        "user" => [
+            "email" => $user->email,
+            "token" => $token->plainTextToken,
+            "tokenExpiresAt" => $token->accessToken->expires_at,
+            "name" => $user->name,
+            "roles" => $roles,
+            "permissions" => $permissions,
+            "isAuthenticated" => true,
+            "isSuperAdmin" => $user->isSuperAdmin(),
+            "is_admin" => $user->isAdmin(),
+        ],
+        "boulangeries" => Company::requireCompanyOfLoggedInUser()->boulangeries->map(function ($boulangerie) {
+            return [
+                'id' => $boulangerie->id,
+                'nom' => $boulangerie->nom,
+            ];
+        }),
+        "should_change_password" => (Hash::check("0000", $user->password) || Hash::check("1234", $user->password))
+    ]);
+}
+}
+
+
+VersementBanqueController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Caisse;
+use App\Models\VersementBanque;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class VersementBanqueController extends Controller
+{
+    //
+    public function index()
+    {
+        return response()->json(VersementBanque::whereCaisseId(Caisse::requireCaisseOfLoggedInUser()->id)->get());
+    }
+    public function store()
+    {
+        $data = request()->validate([
+            "montant" => "required|integer",
+            "banque" => "required|string",
+        ]);
+        $versement = new VersementBanque($data);
+        $versement->caisse()->associate(Caisse::requireCaisseOfLoggedInUser());
+
+
+        DB::transaction(function () use ($versement) {
+            $versement->save();
+            $versement->caisse->diminuerSolde(montant: $versement->montant, metadata: ["commentaire" => "Versement banque  ".$versement->banque]);
+            $versement->caisse->save();
+        });
+        return response()->json($versement);
+
+    }
+    public function destroy(VersementBanque $versement)
+    {
+       DB::transaction(function () use ($versement) {
+           $versement->caisse->augmenterSolde(montant: $versement->montant, metadata: ["commentaire" => "Suppression versement banque ".$versement->banque]);
+           $versement->caisse->save();
+           $versement->delete();
+         });
+        return response()->json($versement);
+    }
 
 }
 
@@ -6451,6 +6755,9 @@ class UserFactory extends Factory
             'name' => $this->faker->name(),
             'email' => $this->faker->unique()->safeEmail(),
             'email_verified_at' => Carbon::now(),
+            'phone_number' => '77'.$this->faker->numberBetween(1000000, 9999999),
+            "is_admin"=> $this->faker->randomElement([1,0]),
+            "is_super_admin"=> $this->faker->randomElement([1,0]),
             'password' => bcrypt($this->faker->password()),
             'remember_token' => Str::random(10),
             'created_at' => Carbon::now(),

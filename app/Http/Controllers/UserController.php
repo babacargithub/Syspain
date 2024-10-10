@@ -75,7 +75,7 @@ class UserController extends Controller
             "roles" => $roles,
             "permissions" => $permissions,
             "isAuthenticated" => true,
-            "isSuperAdmin" => $user->isSuperAdmin(),
+            "is_super_admin" => $user->isSuperAdmin(),
             "is_admin" => $user->isAdmin(),
         ],
         "boulangeries" => Company::requireCompanyOfLoggedInUser()->boulangeries->map(function ($boulangerie) {

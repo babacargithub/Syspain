@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Boulangerie;
 use App\Models\Company;
 use App\Models\User;
 use Illuminate\Database\Migrations\Migration;
@@ -15,8 +16,9 @@ return new class extends Migration
     {
         Schema::create('company_users', function (Blueprint $table) {
             $table->id();
-            $table->foreignIdFor(Company::class);
-            $table->foreignIdFor(User::class);
+            $table->foreignIdFor(Company::class)->constrained()->cascadeOnDelete();
+            $table->foreignIdFor(User::class)->constrained()->cascadeOnDelete();
+            $table->foreignIdFor(Boulangerie::class)->nullable()->constrained()->cascadeOnDelete();
             $table->timestamps();
         });
     }

@@ -10,6 +10,13 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 //use Spatie\Permission\Traits\HasRoles;
 
+/**
+ * @property string $name
+ * @property string $email
+ * @property string $password
+ * @property string $phone_number
+ * @property bool $is_admin
+ */
 class User extends Authenticatable
 {
 //    use CrudTrait;
