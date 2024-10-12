@@ -16,7 +16,6 @@ return new class extends Migration
             $table->id();
             $table->foreignIdFor(Boulangerie::class);
             $table->date('date_production')->nullable(false)
-                ->unique()
                 ->default(today()->toDateString());
             $table->integer('nombre_sac');
             $table->integer('nombre_chariot')->default(0);
@@ -24,6 +23,7 @@ return new class extends Migration
             $table->integer('nombre_pain')->default(0);
             $table->integer('rendement')->default(0);
             $table->timestamps();
+            $table->unique(['boulangerie_id', 'date_production']);
         });
     }
 
