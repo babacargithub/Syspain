@@ -21,7 +21,6 @@ class CaisseController extends Controller
     {
         // this function returns the list of depenses, recettes, versements banques, total depenses, total recettes,
         // total versements banques, solde initial at the start of day, solde final at the end of day
-
         $caisse = Caisse::requireCaisseOfLoggedInUser();
         $depenses = $caisse->depenses()->whereDate('created_at',$dateStart)->get();
         $recettes = $caisse->recettes()->whereDate('created_at',$dateStart)->get();
@@ -30,7 +29,7 @@ class CaisseController extends Controller
         $totalRecettes = $recettes->sum('montant');
         $totalVersementsBanques = $versementsBanques->sum('montant');
         // TODO find a way to track solde initial and solde final
-        $soldeInitial = $caisse->solde;
+        $soldeInitial = $caisse->solde ?? 0;
         $soldeFinal = $soldeInitial + $totalRecettes - $totalDepenses - $totalVersementsBanques;
         return response()->json([
             "typeDepenses"=>TypeDepense::ofCurrentBoulangerie()->get(),
