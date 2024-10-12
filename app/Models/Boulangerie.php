@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToCurrentCompany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +13,7 @@ use Psr\Container\NotFoundExceptionInterface;
 
 class Boulangerie extends Model
 {
+    use BelongsToCurrentCompany;
     use HasFactory;
     protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client","boulangerie_id"];
 

@@ -11,6 +11,7 @@ use App\Models\CaisseTransaction;
 use App\Models\Chariot;
 use App\Models\Client;
 use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\CompteClient;
 use App\Models\CompteLivreur;
 use App\Models\Depense;
@@ -27,6 +28,7 @@ use App\Models\User;
 use App\Models\Versement;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
@@ -45,19 +47,29 @@ class ProductionSeeder extends Seeder
             'name' => 'Admin',
             'phone_number' => 773300853,
             'password'=>Hash::make('0000'),
-            'email' => 'email@gmail.com',]);
+            'email' => 'super_admin@gmail.com',]);
+        $user->is_super_admin = true;
+        $user->is_admin = true;
+        $user->save();
+        Auth::login($user);
         // run company seeder
         $company = Company::create([
             'nom' => 'Boulangerie Groupe Sokhna Aida']);
+        $companyUser = new CompanyUser();
+        $companyUser->company_id = $company->id;
+        $companyUser->user_id = $user->id;
+        $companyUser->save();
         $boulangerie_names = [
             'Kedougou Emergence',
             'Kédougou Téranga',
             'Kédouga Ecobanck',
-            'Kolda Escale',
+            'Kolda Bay cheikh',
             'Kolda Khadim',
-            'Kaffrine',
+            'Kaffrine Bara',
             'Dahra Djoloff',
+            'Dahra Djoloff 2'
         ];
+
         $company->boulangeries()->createMany(collect($boulangerie_names)->map(function ($name) {
             $boulangerie = new Boulangerie();
             $boulangerie->nom = $name;
@@ -76,7 +88,7 @@ class ProductionSeeder extends Seeder
 
         foreach ($company->boulangeries as $boulangerie) {
             $caisse = Caisse::create([
-                "nom" => "Caisse " . $boulangerie->nom,
+                "nom" => "Caisse 1 " . $boulangerie->nom,
                 "boulangerie_id" => $boulangerie->id,
             ]);
 

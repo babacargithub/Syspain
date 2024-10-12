@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Boulangerie;
+use App\Models\Chariot;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\CompteLivreur;
@@ -14,6 +15,7 @@ use App\Models\StockIntrant;
 use App\Models\TypeRecette;
 use App\Models\User;
 use App\Models\Versement;
+use App\Traits\BelongsToCurrentCompany;
 use App\Traits\BoulangerieScope;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
@@ -136,6 +138,9 @@ $total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
                     'name' => $companyUser->user->name,
                     'phone_number' => $companyUser->user->phone_number,
                     'is_admin' => $companyUser->user->is_admin,
+                    "boulangerie" => $companyUser->boulangerie?->nom,
+                    "is_super_admin" => $companyUser->user->isSuperAdmin(),
+                    "disabled" => (bool)$companyUser->user->disabled,
                 ];
             }),
             'boulangeries' => $boulangeries->map(function (Boulangerie $boulangerie) {
@@ -177,19 +182,95 @@ $total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
         return response()->json($user, 201);
     }
 
+    /**
+     * @throws Exception
+     */
     public function updateUser(Request $request, User $user)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string',
-            'email' => 'required|email|unique:users,email,' . $user->id,
+            'phone_number' => 'required|unique:users,phone_number,'.$user->id,
             'boulangerie_id' => 'required|exists:boulangeries,id'
+        ],[
+            'phone_number.unique' => 'Ce numéro de téléphone est déjà utilisé'
+        ]);
+        if (isset($data['boulangerie_id'])){
+            // check if boulangerie belongs to current company
+            $company = Company::requireCompanyOfLoggedInUser();
+            if (!in_array($data['boulangerie_id'], $company->boulangeries->pluck('id')->toArray())) {
+                return response()->json(['message' => 'Cette boulangerie n\'appartient pas à votre entreprise'], 403);
+            }
+        }
+        DB::transaction(function () use ($user, $validated) {
+            $user->update($validated);
+            $companyUser = CompanyUser::where('user_id', $user->id)->first();
+            $companyUser->boulangerie_id = $validated['boulangerie_id'];
+            $user->update($validated);
+            $companyUser->save();
+        });
+
+
+        return response()->json($user);
+    }
+    public function getBoulangerieData(Boulangerie $boulangerie)
+    {
+        $chariots = $boulangerie->chariots()->withoutGlobalScope('boulangerie')->get();
+        $boulangerie->chariots = $chariots;
+        return $boulangerie;
+
+
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function updateBoulangerieData(Request $request, Boulangerie $boulangerie)
+    {
+
+        if (! $boulangerie::belongsToCurrentCompany(Company::requireCompanyOfLoggedInUser(), $boulangerie)) {
+            return response()->json(['message' => 'Vous n\'avez pas les droits pour effectuer cette action'], 403);
+        }
+        $data = $request->validate([
+            'nom' => 'string',
+            "prix_pain_livreur" => 'numeric',
+            "prix_pain_client" => 'numeric',
+            "boulangerie_id" => 'exists:boulangeries,id',
+            'chariots' => 'array',
+
         ]);
 
-        $user->name = $request->name;
-        $user->email = $request->email;
-        $user->boulangerie_id = $request->boulangerie_id;
-        $user->save();
+        $boulangerie->update($data);
+        if (isset($data['chariots'])) {
+           foreach ($data['chariots'] as $chariot) {
+               $boulangerie->chariots()->withoutGlobalScope('boulangerie')->updateOrCreate(['id' => $chariot['id']],
+                   $chariot);
+           }
+        }
+        return $boulangerie;
 
-        return response()->json($user, 200);
     }
+
+    /**
+     * @throws Exception
+     */
+    public function deleteChariot($chariot)
+    {
+        $chariot = Chariot::withoutGlobalScope('boulangerie')->findOrFail($chariot);
+        if ($chariot::belongsToCurrentCompany(Company::requireCompanyOfLoggedInUser(), $chariot)) {
+            $chariot->delete();
+            return response()->json('OK');
+        }
+        return response()->json(['message'=>'Vous n\'avez pas les droits pour effectuer cette action'], 403);
+
+    }
+    public function toggleUserBanState(User $user)
+    {
+        if ($user->isSuperAdmin()){
+            return response()->json(['message' => 'Vous ne pouvez pas désactiver un super admin'], 422);
+        }
+        $user->disabled = !$user->disabled;
+        $user->save();
+        return response()->json($user);
+    }
+
 }

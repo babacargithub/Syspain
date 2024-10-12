@@ -300,5 +300,112 @@ class DistribPanetierController extends Controller
         ]);
     }
 
+    public function getDistribPanetiersOfVersement($entity_type, $entity_id)
+    {
+        $queryBuilder = DistribPanetier::query();
+        switch ($entity_type) {
+            case 'livreur':
+                $queryBuilder = $queryBuilder->whereLivreurId($entity_id);
+                break;
+            case 'client':
+                $queryBuilder = $queryBuilder->whereClientId($entity_id);
+                break;
+            case 'abonnement':
+                $queryBuilder = $queryBuilder->whereAbonnementId($entity_id);
+                break;
+            case 'boutique':
+                $queryBuilder = $queryBuilder->whereBoutiqueId($entity_id);
+                break;
+            default:
+                return response()->json(["message" => "Type d'entité non reconnu"], 422);
+
+        }
+        $distribPanetiers = $queryBuilder->orderBy('created_at', 'desc')->limit(60)->get();
+        if ($entity_type =="livreur"){
+            $livreur = Livreur::findOrFail($entity_id);
+            $totals = [
+                "valeur_pain" => $livreur->compteLivreur->dette,
+                "solde_reliquat" => $livreur->compteLivreur->solde_reliquat,
+                "solde_pain" => $livreur->compteLivreur->solde_pain,
+            ];
+
+            $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($livreur) {
+                    return $this->formatDistribPanetier($distribPanetier, $livreur->prix_pain);
+                });
+            return response()->json([
+                'distribPanetiers' => $distribPanetiers,
+                'totals' => $totals,
+            ]);
+        }
+        elseif($entity_type =="client"){
+            $client = Client::findOrFail($entity_id);
+            $totals = [
+                "valeur_pain" => $client->compteClient->dette,
+                "solde_reliquat" => $client->compteClient->solde_reliquat,
+                "solde_pain" => $client->compteClient->solde_pain,
+            ];
+
+            $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($client) {
+                return $this->formatDistribPanetier($distribPanetier, $client->boulangerie->prix_pain_client);
+            });
+            return response()->json([
+                'distribPanetiers' => $distribPanetiers,
+                'totals' => $totals,
+            ]);
+        }
+        elseif($entity_type =="abonnement"){
+            $abonnement = Abonnement::findOrFail($entity_id);
+            $totals = [
+                "valeur_pain" => $abonnement->dette,
+                "solde_reliquat" => 0,
+                "solde_pain" => $abonnement->solde_pain,
+            ];
+
+            $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($abonnement) {
+                return $this->formatDistribPanetier($distribPanetier, $abonnement->boulangerie->prix_pain_client);
+            });
+            return response()->json([
+                'distribPanetiers' => $distribPanetiers,
+                'totals' => $totals,
+            ]);
+        }
+        elseif($entity_type =="boutique"){
+            $boutique = Boutique::findOrFail($entity_id);
+            $totals = [
+                "valeur_pain" => 0,
+                "solde_reliquat" => 0,
+                "solde_pain" => $boutique->solde_pain,
+            ];
+
+            $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($boutique) {
+                return $this->formatDistribPanetier($distribPanetier, $boutique->boulangerie->prix_pain_client);
+            });
+            return response()->json([
+                'distribPanetiers' => $distribPanetiers,
+                'totals' => $totals,
+            ]);
+        }
+        return response()->json(["distrib_panetiers"=>$distribPanetiers]);
+
+    }
+
+    private  function formatDistribPanetier(DistribPanetier $distribPanetier, $prix_pain){
+        return [
+            'id' => $distribPanetier->id,
+            'nombre_pain' => $distribPanetier->nombre_pain,
+            "nombre_retour" => $distribPanetier->nombre_retour,
+            "valeur_pain" => $distribPanetier->valeurPain(),
+            'prix_pain' => $prix_pain,
+            'created_at' => $distribPanetier->created_at,
+            'montant_verse'=> $distribPanetier->versement !== null ? $distribPanetier->versement->montant_verse : 0,
+            'reliquat'=> $distribPanetier->versement !== null ? $distribPanetier->versement->reliquat : 0,
+            'bonus' => $distribPanetier->bonus,
+            'verse'=> $distribPanetier->versement !== null,
+            'date_production_panetier' => $distribPanetier->productionPanetier->date_production,
+            'periode' => $distribPanetier->productionPanetier->periode,
+            "identifier"=>"Lot pains du ".$distribPanetier->productionPanetier->identifier(),
+            'production_panetier' => $distribPanetier->productionPanetier->id,
+        ];
+    }
 
 }

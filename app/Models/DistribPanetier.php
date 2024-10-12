@@ -74,7 +74,7 @@ class DistribPanetier extends Model
             $prix_pain = $this->livreur->prix_pain;
         }
         else{
-            $prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
+            $prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
         }
         return ($this->attributes['nombre_pain'] - $this->attributes['nombre_retour'])* $prix_pain;
     }

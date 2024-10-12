@@ -29,32 +29,36 @@ class VersementController extends Controller
             'montant' => 'required|numeric',
             'nombre_retour' => 'required|integer',
             'nombre_pain_matin' => 'integer',
-            "caisse_id"=>"integer|exists:caisses,id",// 'retour' is a boolean field, so it should be
-//            "date_versement"=>"date|date_format:Y-m-d",// 'retour' is a boolean field, so it should be
-            'livreur_id' => 'integer|exists:livreurs,id',
-            'client_id' => 'integer|exists:clients,id',
-            'abonnement_id' => 'integer|exists:abonnements,id',
-            'boutique_id' => 'integer|exists:boutiques,id',
             'distrib_panetier_id'=>'integer|exists:distrib_panetiers,id',
         ]);
         if (!isset($data['caisse_id'])){
             $data['caisse_id'] = Caisse::requireCaisseOfLoggedInUser()->id;
         }
+        $caisse = Caisse::findOrFail($data['caisse_id']);
 
-
-        // if neither livreur_id, client_id, abonnement_id, boutique_id is set, then it's a 422 error
-        if (!isset($data['livreur_id']) && !isset($data['client_id']) && !isset($data['abonnement_id']) && !isset($data['boutique_id'])){
-            return response()->json(['message' => 'Vous devez choisir un livreur, un client, un abonnement ou une 
-            boutique'], 422);
-        }
         $versement = new Versement($data);
         $montant_verse = $data['montant'];
 
-        DB::transaction(function () use ($data, $versement, $montant_verse) {
+        DB::transaction(function () use ($data, $versement, $montant_verse, $caisse) {
             $distrib_panetier = DistribPanetier::findOrFail($data['distrib_panetier_id']);
             $distrib_panetier->nombre_retour = $data['nombre_retour'];
 
+           // set versement entity id based on distrib_panetier entity type
+            if ($distrib_panetier->isForLivreur()){
+                $data['livreur_id'] = $distrib_panetier->livreur_id;
+                $versement->livreur_id = $distrib_panetier->livreur_id;
+            }elseif ($distrib_panetier->isForClient()){
+                $data['client_id'] = $distrib_panetier->client_id;
+                $versement->client_id = $distrib_panetier->client_id;
+            }elseif ($distrib_panetier->isForBoutique()){
+                $data['boutique_id'] = $distrib_panetier->boutique_id;
+                $versement->boutique_id = $distrib_panetier->boutique_id;
+            }elseif ($distrib_panetier->isForAbonnement()){
+                $data['abonnement_id'] = $distrib_panetier->abonnement_id;
+                $versement->abonnement_id = $distrib_panetier->abonnement_id;
+            }
             $versement->montant_verse = $data['montant'];
+
         $versement->nombre_retour = $data['nombre_retour'];
         $versement->date_versement = today()->toDateString();
 
@@ -62,16 +66,12 @@ class VersementController extends Controller
         if ($versement->isForLivreur()){
             $livreur = Livreur::findOrFail($data['livreur_id']);
             $versement->livreur()->associate($livreur);
-
-
-
             // vérifier le montant versé par le livreur pour savoir s'il doit de l'argent ou on doit réduire son solde reliquat
             $compte_livreur = $livreur->compteLivreur;
             $compte_data = $compte_livreur->toArray();
             $nombre_pain_a_comptabiliser = $distrib_panetier->nombre_pain - $data['nombre_retour'];
             $montant_a_verser = $distrib_panetier->valeurPain();
             $montant_verse = $data['montant'];
-
 
             if ($montant_verse > $montant_a_verser) {
                 $compte_livreur->solde_reliquat -= ($montant_verse - $montant_a_verser);
@@ -84,48 +84,44 @@ class VersementController extends Controller
             $versement->compte_data = $compte_data;
             $versement->save();
 
-            $compte_livreur->dette = 0;
-            $compte_livreur->solde_pain = 0;
+            $compte_livreur->dette = $compte_livreur->dette - ($distrib_panetier->nombre_pain * $livreur->prix_pain);
+            $compte_livreur->solde_pain = $compte_livreur->solde_pain - $distrib_panetier->nombre_pain;
             $compte_livreur->save();
+            $identifier = $versement->identifier();
+            $caisse->recettes()->create([
+                'montant' => $montant_verse,
 
+                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
+                    TypeRecette::VERSEMENT_LIVREUR)
+                    ->firstOrFail()->id,
+                'commentaire' => 'Versement de ' . $identifier,
+                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            ]);
             //save distrib panetier
 
         }elseif ($versement->isForClient()) {
             $versement->client()->associate(Client::find($data['client_id']));
             $compte_client = $versement->client->compteClient;
-            $compte_client->dette = 0;
-            $compte_client->solde_pain = 0;
+            $compte_client->dette = $compte_client->dette - ($distrib_panetier->nombre_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client);
+            $compte_client->solde_pain = $compte_client->solde_pain - $distrib_panetier->nombre_pain;
             $compte_client->save();
             // calculate reliquat
 
         }
         elseif ($versement->isForBoutique()) {
-            $versement->boutique()->associate(Boutique::find($data['boutique_id']));
+            $versement->boutique()->associate(Boutique::findOrFail($data['boutique_id']));
         }
         elseif ($versement->isForAbonnement()) {
-            $versement->abonnement()->associate(Abonnement::find($data['abonnement_id']));
+            $versement->abonnement()->associate(Abonnement::findOrFail($data['abonnement_id']));
         }
 
-        $versement->caisse()->associate(Caisse::find($data['caisse_id']));
+        $versement->caisse()->associate($caisse);
         $versement->save();
 
-        $caisse = Caisse::find($data['caisse_id']);
         $caisse->augmenterSolde($montant_verse);
 
-            $identifier = $versement->identifier();
-
-
-
 // Create the recette with the determined identifier
-           $caisse->recettes()->create([
-                'montant' => $montant_verse,
 
-                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
-                        TypeRecette::VERSEMENT_LIVREUR)
-                    ->firstOrFail()->id,
-                'commentaire' => 'Versement de ' . $identifier,
-                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
-            ]);
             $distrib_panetier->versement()->associate($versement);
             $distrib_panetier->save();
 

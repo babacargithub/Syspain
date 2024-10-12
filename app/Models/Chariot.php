@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\BelongsToCurrentCompany;
 use App\Traits\BoulangerieScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Chariot extends Model
 {
     use BoulangerieScope;
+    use BelongsToCurrentCompany;
 
     use HasFactory;
     protected $fillable = ["nom","nombre_pain","boulangerie_id"];

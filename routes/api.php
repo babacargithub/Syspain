@@ -14,6 +14,8 @@ use App\Http\Controllers\IntrantController;
 use App\Http\Controllers\ProdPatisserieController;
 use App\Http\Controllers\RecetteController;
 use App\Http\Controllers\StockController;
+use App\Http\Controllers\TypeDepenseController;
+use App\Http\Controllers\TypeRecetteController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VersementBanqueController;
 use App\Http\Controllers\VersementController;
@@ -45,11 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
        Route::resource('petrisseurs', PetrisseurController::class);
        Route::get('panetiers/date/{date}', [PanetierController::class, 'productionDuJour']);
        Route::resource('panetiers', PanetierController::class)
-
-           ->parameters([
-               'panetiers' => 'productionPanetier',
-               // customise the store route
-           ]);
+           ->parameters(['panetiers' => 'productionPanetier']);
        Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
        Route::get('distribution_panetiers/{productionPanetier}/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
        Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
@@ -70,6 +68,8 @@ Route::middleware('auth:sanctum')->group(function () {
 // ============= SECTION LIVREURS ====================
        Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
        Route::get('/livreurs/{livreur}/distribution_panetiers', [LivreurController::class, 'getDistribPanetiersOfLivreurs']);
+       Route::get('/distribution_panetiers/get_list_for_versements/{entity_type}/{entity_id}', [DistribPanetierController::class,
+           'getDistribPanetiersOfVersement']);
 
        Route::put('livreurs/{livreur}/activate/{is_active}', [LivreurController::class, 'disable'])->name('livreurs.activate');
        Route::resource('livreurs', LivreurController::class);
@@ -81,13 +81,11 @@ Route::middleware('auth:sanctum')->group(function () {
        Route::post('stocks/sortie/{intrant}',[StockController::class,'sortieStock']);
        Route::get('stocks/movements/{intrant}', [StockController::class, 'getMovements']);
        Route::put('clients/{client}/toggle', [ClientController::class, 'toggle']);
-
        Route::resource('clients', ClientController::class);
-
        Route::get('recettes/date/{date}', [RecetteController::class, 'recettesJour']);
        Route::resource('recettes', RecetteController::class);
        Route::get('chariots',function (){
-           return response()->json(Chariot::all()->map(function (Chariot $chariot){
+           return response()->json(Chariot::ofCurrentBoulangerie()->get()->map(function (Chariot $chariot){
                return [
                    'id' => $chariot->id,
                    'nom' => $chariot->nom,
@@ -133,13 +131,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
        Route::get('caisses/{dateStart}/{dateEnd?}', [CaisseController::class, 'caisseDate']);
        Route::get('caisse',function (){
-
            $caisse = Caisse::requireCaisseOfLoggedInUser();
            return response()->json(["solde" => $caisse->solde]);
-
        });
 //    ============= ABONNEMENT ===============
        Route::post('abonnements', [AbonnementController::class, 'store']);
+
+       // Resources of type depenses and type recettes
+         Route::resource('type_depenses', TypeDepenseController::class);
+         Route::resource('type_recettes', TypeRecetteController::class);
 
    })
    ->withoutMiddleware(AdminMiddleware::class);
@@ -150,7 +150,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('boulangeries/change_active', [AdminController::class, 'changeActiveBoulangerie']);
         Route::get('boulangeries/{boulangerie}/dashboard/{date}', [AdminController::class, 'dashboard']);
         Route::get('users_and_boulangeries', [AdminController::class, 'getUsersAndBoulangeries']);
+        Route::get('boulangeries/{boulangerie}',[AdminController::class,'getBoulangerieData']);
+        Route::put('boulangeries/{boulangerie}/update',[AdminController::class,'updateBoulangerieData']);
         Route::post('users/create', [AdminController::class, 'createUser']);
+        Route::post('users/{user}/update', [AdminController::class, 'updateUser']);
+        Route::put('users/{user}/toggle', [AdminController::class, 'toggleUserBanState']);
+        Route::delete('chariots/{chariot}/delete', [AdminController::class, 'deleteChariot']);
     })->middleware(AdminMiddleware::class);
 
 
