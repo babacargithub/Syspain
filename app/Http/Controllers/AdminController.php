@@ -190,7 +190,7 @@ $total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
         $validated = $request->validate([
             'name' => 'required|string',
             'phone_number' => 'required|unique:users,phone_number,'.$user->id,
-            'boulangerie_id' => 'required|exists:boulangeries,id'
+            'boulangerie_id' => 'exists:boulangeries,id'
         ],[
             'phone_number.unique' => 'Ce numéro de téléphone est déjà utilisé'
         ]);
@@ -204,7 +204,9 @@ $total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
         DB::transaction(function () use ($user, $validated) {
             $user->update($validated);
             $companyUser = CompanyUser::where('user_id', $user->id)->first();
-            $companyUser->boulangerie_id = $validated['boulangerie_id'];
+            if (isset($validated['boulangerie_id'])) {
+                $companyUser->boulangerie_id = $validated['boulangerie_id'];
+            }
             $user->update($validated);
             $companyUser->save();
         });
