@@ -100,25 +100,53 @@ class VersementController extends Controller
             //save distrib panetier
 
         }elseif ($versement->isForClient()) {
-            $versement->client()->associate(Client::find($data['client_id']));
+             $versement->client()->associate($client = Client::find($data['client_id']));
             $compte_client = $versement->client->compteClient;
             $compte_client->dette = $compte_client->dette - ($distrib_panetier->nombre_pain * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client);
             $compte_client->solde_pain = $compte_client->solde_pain - $distrib_panetier->nombre_pain;
             $compte_client->save();
+            $caisse->recettes()->create([
+                'montant' => $montant_verse,
+
+                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
+                    TypeRecette::VERSEMENT_CLIENT)
+                    ->firstOrFail()->id,
+                'commentaire' => 'Versement de ' . $client->identifier(),
+                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            ]);
             // calculate reliquat
 
         }
         elseif ($versement->isForBoutique()) {
-            $versement->boutique()->associate(Boutique::findOrFail($data['boutique_id']));
+            $versement->boutique()->associate($boutique = Boutique::findOrFail($data['boutique_id']));
+            $caisse->recettes()->create([
+                'montant' => $montant_verse,
+
+                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
+                    TypeRecette::VENTE_BOUTIQUE)
+                    ->firstOrFail()->id,
+                'commentaire' => 'Vente Boutique  ' . $boutique->identifier(),
+                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            ]);
         }
         elseif ($versement->isForAbonnement()) {
-            $versement->abonnement()->associate(Abonnement::findOrFail($data['abonnement_id']));
+            $versement->abonnement()->associate($abonnement = Abonnement::findOrFail($data['abonnement_id']));
+            $caisse->recettes()->create([
+                'montant' => $montant_verse,
+
+                'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
+                    TypeRecette::VERSEMENT_ABONNEMENT)
+                    ->firstOrFail()->id,
+                'commentaire' => 'Paiement Abonnement :  ' . $abonnement->identifier(),
+                'boulangerie_id' => Boulangerie::requireBoulangerieOfLoggedInUser()->id,
+            ]);
         }
 
         $versement->caisse()->associate($caisse);
         $versement->save();
-
+        // augmenter le solde de la caisse
         $caisse->augmenterSolde($montant_verse);
+        $caisse->save();
 
 // Create the recette with the determined identifier
 
@@ -260,10 +288,14 @@ class VersementController extends Controller
                     'dette' => $livreur->compteLivreur->dette,
                 ];
             }),
-            'clients' => $clients->map(function (Client $client){
+            'clients' => $clients
+//                ->filter(function (Client $client){
+//                    return $client->abonnement == null;
+//                })
+                ->map(function (Client $client){
                 return [
                     'id' => $client->id,
-                    'nom' => $client->nom,
+                    'nom' => $client->identifier(),
                     'solde_pain' => $client->compteClient->solde_pain,
                     'dette' => $client->compteClient->dette,
                 ];

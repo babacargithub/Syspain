@@ -17,7 +17,7 @@ class TypeRecette extends Model
     const VERSEMENT_LIVREUR = "versement_livreur";
     const VENTE_PATISSERIE = "vente_patisserie";
     const VERSEMENT_CLIENT = 'versement_client';
-    const VERSEMENT_BOUTIQUE = 'versement_boutique';
+    const VENTE_BOUTIQUE = 'versement_boutique';
     const VERSEMENT_ABONNEMENT = 'versement_abonnement';
     const VENTE_RESTANT = 'vente_restant';
     protected $fillable = ["nom","is_active",'boulangerie_id'];

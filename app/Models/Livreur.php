@@ -46,10 +46,8 @@ class Livreur extends Model
 
     public function getPrixPainAttribute() : int
     {
-        if ($this->attributes['prix_pain'] == null || $this->attributes['prix_pain'] == 0) {
             return $this->boulangerie->prix_pain_livreur;
-        }
-        return $this->attributes['prix_pain'];
+
 
     }
 }

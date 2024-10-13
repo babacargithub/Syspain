@@ -98,7 +98,7 @@ class ProductionSeeder extends Seeder
                 ['nom' => 'Versement Livreur', 'constant_name' => TypeRecette::VERSEMENT_LIVREUR],
                 ['nom' => 'Versement Client', 'constant_name' => TypeRecette::VERSEMENT_CLIENT],
                 ['nom' => 'Paiement Abonnement', 'constant_name' => TypeRecette::VERSEMENT_ABONNEMENT],
-                ['nom' => 'Vente Boutique', 'constant_name' => TypeRecette::VERSEMENT_BOUTIQUE],
+                ['nom' => 'Vente Boutique', 'constant_name' => TypeRecette::VENTE_BOUTIQUE],
                 ['nom' => 'Vente de restants', 'constant_name' => TypeRecette::VENTE_RESTANT],
                 ['nom' => 'Autres recettes', 'constant_name' => 'autres_recettes']
             ];
