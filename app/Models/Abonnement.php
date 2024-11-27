@@ -29,4 +29,9 @@ class Abonnement extends Model
         return 'Abonnement de '. $this->client->identifier();
 
     }
+    public function getBoulangerieAttribute()
+    {
+        return $this->client->boulangerie;
+
+    }
 }

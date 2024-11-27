@@ -152,6 +152,8 @@ class DistribPanetierController extends Controller
 
             }
             // loop through abonnements and create a distribPanetier for each
+            $prix_pain_boutique = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_boutique;
+
             foreach ($data['abonnements'] as $abonnement_data) {
                 $distribPanetier = $productionPanetier->distribPanetiers()->whereAbonnementId($abonnement_data['abonnement_id'])
                     ->first();
@@ -164,7 +166,7 @@ class DistribPanetierController extends Controller
                     $productionPanetier->distribPanetiers()->save($distribPanetier);
                     $abonnement->solde_pain += $abonnement_data['nombre_pain'];
                     $abonnement->dette += ($abonnement_data['nombre_pain'] *
-                        $productionPanetier->prix_pain_client);
+                        $prix_pain_boutique);
                 } else {
                     $oldNombrePain = $distribPanetier->nombre_pain;
                     $distribPanetier->nombre_pain = $abonnement_data['nombre_pain'];
@@ -174,10 +176,10 @@ class DistribPanetierController extends Controller
                     $diff = $abonnement_data['nombre_pain'] - $oldNombrePain;
                     if ($diff > 0) {
                         $abonnement->dette += ($diff *
-                            $prix_pain_client);
+                            $prix_pain_boutique);
                     } else if ($diff < 0) {
                         $abonnement->dette -= (abs($diff) *
-                            $prix_pain_client);
+                            $prix_pain_boutique);
                     }
                 }
                 $abonnement->save();
@@ -362,7 +364,7 @@ class DistribPanetierController extends Controller
             ];
 
             $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($abonnement) {
-                return $this->formatDistribPanetier($distribPanetier, $abonnement->boulangerie->prix_pain_client);
+                return $this->formatDistribPanetier($distribPanetier, $abonnement->boulangerie->prix_pain_boutique);
             });
             return response()->json([
                 'distribPanetiers' => $distribPanetiers,
@@ -377,19 +379,17 @@ class DistribPanetierController extends Controller
                 "solde_pain" => $boutique->solde_pain,
             ];
 
-            $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($boutique) {
-                return $this->formatDistribPanetier($distribPanetier, $boutique->boulangerie->prix_pain_client);
-            });
             return response()->json([
                 'distribPanetiers' => $distribPanetiers,
-                'totals' => $totals,
+                'totals' => $totals
             ]);
         }
         return response()->json(["distrib_panetiers"=>$distribPanetiers]);
 
     }
 
-    private  function formatDistribPanetier(DistribPanetier $distribPanetier, $prix_pain){
+    private  function formatDistribPanetier(DistribPanetier $distribPanetier, $prix_pain): array
+    {
         return [
             'id' => $distribPanetier->id,
             'nombre_pain' => $distribPanetier->nombre_pain,

@@ -15,7 +15,12 @@ class Boulangerie extends Model
 {
     use BelongsToCurrentCompany;
     use HasFactory;
-    protected $fillable = ["nom","company_id","prix_pain_livreur","prix_pain_client","boulangerie_id"];
+    protected $fillable = ["nom",
+        "company_id",
+        "prix_pain_livreur",
+        "prix_pain_client",
+        "prix_pain_boutique",
+        "boulangerie_id"];
 
     /**
      * @throws ContainerExceptionInterface

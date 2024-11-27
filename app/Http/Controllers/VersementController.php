@@ -133,7 +133,6 @@ class VersementController extends Controller
             $versement->abonnement()->associate($abonnement = Abonnement::findOrFail($data['abonnement_id']));
             $caisse->recettes()->create([
                 'montant' => $montant_verse,
-
                 'type_recette_id' => TypeRecette::ofCurrentBoulangerie()->where("constant_name",
                     TypeRecette::VERSEMENT_ABONNEMENT)
                     ->firstOrFail()->id,

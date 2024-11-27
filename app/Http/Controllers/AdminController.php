@@ -236,6 +236,7 @@ $total_dette_pain = DistribPanetier::withoutGlobalScope('boulangerie')
             'nom' => 'string',
             "prix_pain_livreur" => 'numeric',
             "prix_pain_client" => 'numeric',
+            "prix_pain_boutique" => 'numeric',
             "boulangerie_id" => 'exists:boulangeries,id',
             'chariots' => 'array',
 

@@ -35,7 +35,7 @@ class PanetierController extends Controller
             'date_production' => ['date_format:Y-m-d','required', new UniqueProductionPeriode($request->get('date_production'), $request->get('periode'))],
             'nombre_pain' => 'required|integer',
             'nombre_plat' => 'required|integer',
-            'nombre_sac' => 'required|integer',
+            'nombre_sac' => 'required',
             'ration' => 'required|integer',
             'donation' => 'required|integer',
             'casse' => 'required|integer',

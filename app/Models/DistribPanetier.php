@@ -73,6 +73,10 @@ class DistribPanetier extends Model
         if ($this->isForLivreur()) {
             $prix_pain = $this->livreur->prix_pain;
         }
+        elseif($this->isForBoutique() || $this->isForAbonnement()){
+            $prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_boutique;
+
+        }
         else{
             $prix_pain = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
         }
