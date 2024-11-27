@@ -66,7 +66,7 @@ class UserController extends Controller
 
     }*/
     $user = request()->user();
-    $response = response(["token" => $token->plainTextToken,
+    $response = ["token" => $token->plainTextToken,
         "tokenExpiresAt"=>$token->accessToken->expires_at,
         "params" => $params,
         "user" => [
@@ -82,7 +82,7 @@ class UserController extends Controller
         ],
 
         "should_change_password" => (Hash::check("0000", $user->password) || Hash::check("1234", $user->password))
-    ]);
+    ];
     if ($user->isSuperAdmin()){
         $response["boulangeries"] = Company::requireCompanyOfLoggedInUser()->boulangeries->map(function
         ($boulangerie) {
@@ -102,6 +102,6 @@ class UserController extends Controller
         $response["boulangeries"] = $boulangeries;
     }
 
-    return $response;
+    return \response($response);
 }
 }

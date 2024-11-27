@@ -17,6 +17,7 @@ class AdminMiddleware
     public function handle(Request $request, Closure $next): Response
     {
 
+
        // check if route starts with api/admin
         if ( \Str::startsWith($request->path(), 'api/admin') ) {
             if (\Str::contains($request->path(), 'boulangeries/change_active', ignoreCase: true)) {
