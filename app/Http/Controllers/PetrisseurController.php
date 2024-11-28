@@ -60,22 +60,27 @@ class PetrisseurController extends Controller
             'nombre_pain'  => 'integer',
             'commentaire' => 'nullable|string',
             "rendement" => 'integer',
-            "chariots" => 'required|array',
+            "chariots" => 'array',
         ], [
             'date_production.unique' => 'La production de cette date a déjà été crée',
         ]);
         $production = new ProductionPetrisseur($data);
 
         // attach chariots
-        $chariots = collect($data['chariots'])->map(function ($chariot) {
-            return new ChariotProdPetrisseur($chariot);
-        });
+        $chariots =   collect($data['chariots']??[]);
+        if (isset($data['chariots'])) {
+           $chariots->map(function ($chariot) {
+                return new ChariotProdPetrisseur($chariot);
+            });
+        }
 
         $boulangerie = Boulangerie::requireBoulangerieOfLoggedInUser();
 
         $production->boulangerie()->associate($boulangerie);
         $production->save();
-        $production->chariots()->saveMany($chariots);
+        if ($chariots->isNotEmpty()) {
+            $production->chariots()->saveMany($chariots);
+        }
         // réduire stock de farine
         $intrantFarine = Intrant::where('nom', 'LIKE','%farine%')
             ->whereBoulangerieId($boulangerie->id)
