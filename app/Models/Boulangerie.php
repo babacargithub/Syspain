@@ -40,11 +40,11 @@ class Boulangerie extends Model
 
         }
         $is_admin = $user->is_admin;
+            $active_boulangerie_id = request()->header('ACTIVE-BOULANGERIE-ID');
         if ($is_admin) {
-            $boulangerie_id = request()->header('ACTIVE-BOULANGERIE-ID');
 
-            if ($boulangerie_id) {
-                return Boulangerie::findOrFail($boulangerie_id);
+            if ($active_boulangerie_id) {
+                return Boulangerie::findOrFail($active_boulangerie_id);
             }else{
                 // get company of user
                 $company = CompanyUser::where('user_id',$user->id)->firstOrFail()->company;
@@ -52,7 +52,19 @@ class Boulangerie extends Model
             }
         }else{
             // get boulangerie of user
-            $boulangerie = CompanyUser::where('user_id',$user->id)->firstOrFail()->boulangerie;
+            $boulangerie = null;
+            if ($active_boulangerie_id != null) {
+                $boulangerie = CompanyUser::whereBoulangerieId($active_boulangerie_id)
+                    ->whereUserId($user->id)
+                    ->firstOrFail()
+                    ->boulangerie;
+            }
+            else {
+                CompanyUser::where('user_id',$user->id)
+                ->firstOrFail()
+                ->boulangerie;
+            }
+
             if ($boulangerie === null) {
                 throw new \Exception('Require boulangerie of logged in user failed, User not assigned to a boulangerie');
             }

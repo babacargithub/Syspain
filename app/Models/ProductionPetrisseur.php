@@ -19,7 +19,12 @@ class ProductionPetrisseur extends Model
     use BoulangerieScope;
     use HasFactory;
     protected $table ="production_petrisseurs";
-    protected $fillable = ["date_production","boulangerie_id","nombre_chariot","nombre_pain","nombre_plat","nombre_sac","rendement","vente"];
+    protected $fillable = [
+        "commentaire",
+        "date_production",
+        "boulangerie_id",
+        "nombre_chariot",
+        "nombre_pain","nombre_plat","nombre_sac","rendement"];
 
     public function boulangerie(): BelongsTo
     {

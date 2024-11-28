@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Boulangerie;
 use App\Models\BoulangerieUser;
 use App\Models\Company;
+use App\Models\CompanyUser;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -92,7 +93,7 @@ class UserController extends Controller
             ];
         });
     }else{
-        $boulangeries = BoulangerieUser::whereUserId($user->id)->get()->map(function ($boulangerieUser){
+        $boulangeries = CompanyUser::whereUserId($user->id)->get()->map(function ($boulangerieUser){
             $boulangerie = $boulangerieUser->boulangerie;
             return [
                 'id' => $boulangerie->id,

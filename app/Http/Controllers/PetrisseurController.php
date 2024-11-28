@@ -36,6 +36,7 @@ class PetrisseurController extends Controller
                 'nombre_plat' => $petrisseur->nombre_plat,
                 'nombre_pain' => $petrisseur->nombre_pain,
                 'rendement' => $petrisseur->rendement,
+                "commentaire" => $petrisseur->commentaire,
                 'chariots' => $petrisseur->chariots->map(function (ChariotProdPetrisseur $chariot){
                     return [
                         'id' => $chariot->id,
@@ -57,6 +58,7 @@ class PetrisseurController extends Controller
             'nombre_sac'  => 'required|numeric', // 'nombre_sac' => 'required|integer
             'nombre_plat'  => 'required|integer',
             'nombre_pain'  => 'integer',
+            'commentaire' => 'nullable|string',
             "rendement" => 'integer',
             "chariots" => 'required|array',
         ], [
@@ -98,6 +100,7 @@ class PetrisseurController extends Controller
             'nombre_sac'  => 'numeric',
             'nombre_plat'  => 'integer',
             'rendement'  => 'integer',
+            'commentaire' => 'nullable|string',
             'nombre_pain'  => 'integer',
             'chariots' => 'array',
         ]);
