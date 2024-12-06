@@ -62,9 +62,7 @@ class DistribPanetierController extends Controller
 
         if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain produit"], 422);
-        } else if ($data['nombre_pain'] < 0) {
-            return response()->json(["message" => "Le nombre de pain distribué ne peut pas être négatif"], 422);
-        } else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain_entregistre - $totalPainOfExisting)) {
+        }else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain_entregistre - $totalPainOfExisting)) {
             return response()->json(["message" => "Pour le total de pain que vous voulez enregistrer le nombre de pain restant est insuffisant !"], 422);
         }
         // start transaction before saving operations
@@ -322,7 +320,8 @@ class DistribPanetierController extends Controller
                 return response()->json(["message" => "Type d'entité non reconnu"], 422);
 
         }
-        $distribPanetiers = $queryBuilder->orderBy('created_at', 'desc')->limit(60)->get();
+        $distribPanetiers =
+            $queryBuilder->orderBy('created_at', 'desc')->limit(60)->get();
         if ($entity_type =="livreur"){
             $livreur = Livreur::findOrFail($entity_id);
             $totals = [
@@ -378,7 +377,10 @@ class DistribPanetierController extends Controller
                 "solde_reliquat" => 0,
                 "solde_pain" => $boutique->solde_pain,
             ];
-
+            $distribPanetiers = $distribPanetiers->map(function (DistribPanetier $distribPanetier) use ($boutique) {
+                return $this->formatDistribPanetier($distribPanetier, $boutique->prix_pain ??
+                    $boutique->boulangerie->prix_pain_boutique);
+            });
             return response()->json([
                 'distribPanetiers' => $distribPanetiers,
                 'totals' => $totals

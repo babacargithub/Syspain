@@ -60,12 +60,12 @@ class Boulangerie extends Model
                     ->boulangerie;
             }
             else {
-                CompanyUser::where('user_id',$user->id)
+                $boulangerie = CompanyUser::where('user_id',$user->id)
                 ->firstOrFail()
                 ->boulangerie;
             }
 
-            if ($boulangerie === null) {
+            if ($boulangerie == null) {
                 throw new \Exception('Require boulangerie of logged in user failed, User not assigned to a boulangerie');
             }
             return $boulangerie;

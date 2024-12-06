@@ -11,7 +11,7 @@ class Boutique extends Model
 {
     use BoulangerieScope;
     use HasFactory;
-    protected $fillable = ["nom", "boulangerie_id", "solde_pain", "adresse"];
+    protected $fillable = ["nom", "boulangerie_id", "solde_pain", "adresse","prix_pain"];
     public function boulangerie(): BelongsTo
     {
         return $this->belongsTo(Boulangerie::class);

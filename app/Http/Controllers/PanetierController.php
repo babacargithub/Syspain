@@ -39,7 +39,7 @@ class PanetierController extends Controller
             'ration' => 'required|integer',
             'donation' => 'required|integer',
             'casse' => 'required|integer',
-            'chariots' => '|required|array',
+            'chariots' => 'array',
             'periode' => 'required|in:matin,soir',
             'mange' => 'required|integer',
             'production_petrisseur_id' => 'required|integer|exists:production_petrisseurs,id',
@@ -47,7 +47,9 @@ class PanetierController extends Controller
         $productionPanetier = new ProductionPanetier($data);
         $productionPanetier->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
         $productionPanetier->save();
-        $productionPanetier->chariots()->createMany($request->chariots);
+        if ($request->has('chariots') && is_array($request->chariots)) {
+            $productionPanetier->chariots()->createMany($request->chariots);
+        }
         return response()->json($productionPanetier->load('chariots'), 201);
     }
 
