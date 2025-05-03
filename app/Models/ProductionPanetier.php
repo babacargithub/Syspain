@@ -86,7 +86,21 @@ class ProductionPanetier extends Model
         return 'Cahier Panetier '.strtoupper($this->periode).' du ' . $this->getDateProductionAttribue();
 
     }
+    public function labelHumanized(): string
+    {
+        return 'Panetier '.strtoupper($this->periode).' ' . $this->getHumanizedDateProductionAttribue();
 
+    }
+
+    public function getHumanizedDateProductionAttribue(): string
+    {
+        try {
+            return Carbon::parse($this->date_production)->locale('fr_FR')->isoFormat('dddd D MMMM YYYY');        }
+        catch (InvalidFormatException $e) {
+            return $this->date_production;
+        }
+
+    }
     public function getDateProductionAttribue(): string
     {
         try {

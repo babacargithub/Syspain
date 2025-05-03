@@ -11,6 +11,7 @@ use App\Models\Client;
 use App\Models\CompteLivreur;
 use App\Models\DistribPanetier;
 use App\Models\Livreur;
+use App\Models\ProductionPanetier;
 use App\Models\TypeRecette;
 use App\Models\Versement;
 use Illuminate\Http\Request;
@@ -312,6 +313,18 @@ class VersementController extends Controller
                     'id' => $boutique->id,
                     'nom' => $boutique->identifier(),
                     'solde_pain' => $boutique->solde_pain,
+                ];
+            }),
+            'latest_prod_panetiers' => ProductionPanetier::limit(3)
+                ->orderByDesc('date_production')
+                ->get()
+                ->map(function
+            (ProductionPanetier
+                                                                                   $productionPanetier){
+                return [
+                    'id' => $productionPanetier->id,
+                    'label' => $productionPanetier->labelHumanized()
+
                 ];
             }),
         ]);

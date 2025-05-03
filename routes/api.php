@@ -51,6 +51,9 @@ Route::middleware('auth:sanctum')->group(function () {
        Route::get('distribution_panetiers/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
        Route::get('distribution_panetiers/{productionPanetier}/destinations', [DistribPanetierController::class, 'getEntitiesForDistrib']);
        Route::post('distribution_panetiers/{productionPanetier}', [DistribPanetierController::class, 'store'])->name('distrib-panetier');
+       Route::post('distribution_panetiers/{productionPanetier}/transfer', [DistribPanetierController::class, 'transferDistribPanetier']);
+       Route::get('distribution_panetiers/entities_for_transfer', [DistribPanetierController::class, 'entitiesForTransfer'])
+           ->name('distrib-panetier-entity-for-transfer');
        Route::resource('distribution_panetiers', DistribPanetierController::class,[
            'only' => ['index','update','destroy','show']
        ])->parameters([
@@ -67,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
            ->only(['index', 'store', 'destroy']);
 // ============= SECTION LIVREURS ====================
        Route::get('/livreurs/{livreur}/historique', [LivreurController::class, 'historique']);
+       Route::post('/livreurs/{livreur}/new_distrib_panetier', [DistribPanetierController::class, 'newDistribPanetierLivreur']);
        Route::get('/livreurs/{livreur}/distribution_panetiers', [LivreurController::class, 'getDistribPanetiersOfLivreurs']);
        Route::get('/distribution_panetiers/get_list_for_versements/{entity_type}/{entity_id}', [DistribPanetierController::class,
            'getDistribPanetiersOfVersement']);

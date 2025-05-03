@@ -11,6 +11,7 @@ use App\Models\Livreur;
 use App\Models\ProductionPanetier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
 
 class DistribPanetierController extends Controller
 {
@@ -26,16 +27,16 @@ class DistribPanetierController extends Controller
             'boutiques' => 'array',
             'livreurs.*.livreur_id' => 'required|integer|exists:livreurs,id',
             'livreurs.*.nombre_pain' => 'required|integer',
-            'livreurs.*.bonus' => 'required|integer',
+            'livreurs.*.bonus' => 'nullable|required|integer',
             'clients.*.client_id' => 'required|integer|exists:clients,id',
             'clients.*.nombre_pain' => 'required|integer',
-            'clients.*.bonus' => 'required|integer',
+            'clients.*.bonus' => 'nullable|integer',
             'abonnements.*.abonnement_id' => 'required|integer|exists:abonnements,id',
             'abonnements.*.nombre_pain' => 'required|integer',
-            'abonnements.*.bonus' => 'required|integer',
+            'abonnements.*.bonus' => 'nullable|integer',
             'boutiques.*.boutique_id' => 'required|integer|exists:boutiques,id',
             'boutiques.*.nombre_pain' => 'required|integer',
-            'boutiques.*.bonus' => 'required|integer',
+            'boutiques.*.bonus' => 'nullable|integer',
 
         ]);
         // check if the sum of all the pain distributed is equal to the pain produced
@@ -60,11 +61,11 @@ class DistribPanetierController extends Controller
             collect($data['boutiques'])->sum('nombre_pain') - $totalPainOfExisting;
         // loop through livreurs and create a distribPanetier for each
 
-        if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
+       /* if ($data['nombre_pain'] > $productionPanetier->nombre_pain) {
             return response()->json(["message" => "Le nombre de pain distribué ne peut pas être supérieur au nombre de pain produit"], 422);
         }else if ($data['nombre_pain'] > ($productionPanetier->nombre_pain_entregistre - $totalPainOfExisting)) {
             return response()->json(["message" => "Pour le total de pain que vous voulez enregistrer le nombre de pain restant est insuffisant !"], 422);
-        }
+        }*/
         // start transaction before saving operations
         DB::transaction(function () use ($productionPanetier, $data) {
             $prix_pain_livreur = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
@@ -79,7 +80,7 @@ class DistribPanetierController extends Controller
                     $distribPanetier = new DistribPanetier([
                         'livreur_id' => $distrib_data['livreur_id'],
                         'nombre_pain' => $distrib_data['nombre_pain'],
-                        'bonus' => $distrib_data['bonus'],
+                        'bonus' => $distrib_data['bonus'] ??0,
                     ]);
                     $productionPanetier->distribPanetiers()->save($distribPanetier);
                     $livreur = $distribPanetier->livreur;
@@ -91,7 +92,7 @@ class DistribPanetierController extends Controller
                 } else {
                     $oldNombrePain = $distribPanetier->nombre_pain;
                     $distribPanetier->nombre_pain = $distrib_data['nombre_pain'];
-                    $distribPanetier->bonus = $distrib_data['bonus'];
+                    $distribPanetier->bonus = $distrib_data['bonus'] ?? 0;
                     $distribPanetier->save();
                     // update compte livreur
                     $livreur = $distribPanetier->livreur;
@@ -131,7 +132,7 @@ class DistribPanetierController extends Controller
                 } else {
                     $oldNombrePain = $distribPanetier->nombre_pain;
                     $distribPanetier->nombre_pain = $client_data['nombre_pain'];
-                    $distribPanetier->bonus = $client_data['bonus'];
+                    $distribPanetier->bonus = $client_data['bonus']?? 0;
                     $distribPanetier->save();
                     $client = Client::find($client_data['client_id']);
                     $compte_client = $client->compteClient;
@@ -168,7 +169,7 @@ class DistribPanetierController extends Controller
                 } else {
                     $oldNombrePain = $distribPanetier->nombre_pain;
                     $distribPanetier->nombre_pain = $abonnement_data['nombre_pain'];
-                    $distribPanetier->bonus = $abonnement_data['bonus'];
+                    $distribPanetier->bonus = $abonnement_data['bonus'] ?? 0;
                     $distribPanetier->save();
                     $abonnement->solde_pain += $abonnement_data['nombre_pain'];
                     $diff = $abonnement_data['nombre_pain'] - $oldNombrePain;
@@ -199,7 +200,7 @@ class DistribPanetierController extends Controller
                 } else {
                     $oldNombrePain = $distribPanetier->nombre_pain;
                     $distribPanetier->nombre_pain = $boutique_data['nombre_pain'];
-                    $distribPanetier->bonus = $boutique_data['bonus'];
+                    $distribPanetier->bonus = $boutique_data['bonus'] ?? null;
                     $distribPanetier->save();
                     $diff = $boutique_data['nombre_pain'] - $oldNombrePain;
                     if ($diff > 0) {
@@ -237,7 +238,13 @@ class DistribPanetierController extends Controller
     {
         $boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
 
-        $clients = Client::whereBoulangerieId($boulangerie_id)->get()->map(function (Client $client) use ($productionPanetier) {
+        $clients = Client::whereBoulangerieId($boulangerie_id)
+            // take only clients without abonnement
+            ->whereDoesntHave('abonnement')
+
+            ->get()
+
+            ->map(function (Client $client) use ($productionPanetier) {
             $data = [
                 'id' => $client->id,
                 'nom' => $client->identifier()
@@ -269,7 +276,8 @@ class DistribPanetierController extends Controller
         })->get()->map(function (Abonnement $abonnement) use ($productionPanetier) {
             $data = [
                 'id' => $abonnement->id,
-                'nom' => $abonnement->identifier()
+                'nom' => $abonnement->identifier(),
+                "nombre_pain_jour" => $abonnement->nombre_pain_jour ?? 3,
             ];
             $distribAbonnement = $productionPanetier->distribPanetiers()->whereAbonnementId($abonnement->id)->first();
             if ($distribAbonnement) {
@@ -401,13 +409,179 @@ class DistribPanetierController extends Controller
             'created_at' => $distribPanetier->created_at,
             'montant_verse'=> $distribPanetier->versement !== null ? $distribPanetier->versement->montant_verse : 0,
             'reliquat'=> $distribPanetier->versement !== null ? $distribPanetier->versement->reliquat : 0,
-            'bonus' => $distribPanetier->bonus,
+            'bonus' => $distribPanetier->bonus ?? 0,
             'verse'=> $distribPanetier->versement !== null,
             'date_production_panetier' => $distribPanetier->productionPanetier->date_production,
             'periode' => $distribPanetier->productionPanetier->periode,
             "identifier"=>"Lot pains du ".$distribPanetier->productionPanetier->identifier(),
             'production_panetier' => $distribPanetier->productionPanetier->id,
         ];
+    }
+
+    public function newDistribPanetierLivreur(Livreur $livreur, Request $request)
+    {
+        /** @noinspection PhpConditionAlreadyCheckedInspection */
+        if ($livreur == null) {
+            return response()->json(["message" => "Livreur non trouvé"], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $data = $request->validate([
+            'nombre_pain' => 'required|integer',
+            'retour' => 'nullable|integer',
+            "montant_verse" => 'nullable|integer',
+            "has_versement" => 'nullable|boolean',
+            'production_panetier_id' => 'required|integer|exists:production_panetiers,id',
+        ]);
+        $productionPanetier = ProductionPanetier::findOrFail($data['production_panetier_id']);
+            $distribPanetier = new DistribPanetier([
+                'livreur_id' => $livreur->id,
+                'nombre_pain' => $data['nombre_pain'],
+                'retour' => 0,
+            ]);
+            $productionPanetier->distribPanetiers()->save($distribPanetier);
+        if (isset($data['has_versement']) && $data['has_versement']) {
+            $distribPanetier->versement()->create([
+                'amount' => $data['montant_verse'],
+                //TODO check if we should add the versement to the compte livreur
+//                'reliquat' => $data['nombre_pain'] * $livreur->prix_pain - $data['verse'],
+            ]);
+        }
+
+
+
+    }
+
+    public function entitiesForTransfer()
+    {
+        $boulangerie_id = Boulangerie::requireBoulangerieOfLoggedInUser()->id;
+        $clients = Client::whereBoulangerieId($boulangerie_id)->get();
+        $livreurs = Livreur::whereBoulangerieId($boulangerie_id)->get();
+        $boutiques = Boutique::whereBoulangerieId($boulangerie_id)->get();
+        return response()->json([
+            'clients' => $clients->map(function (Client $client) {
+                return [
+                    'id' => $client->id,
+                    'name' => $client->identifier()
+                ];
+            }),
+            'livreurs' => $livreurs->map(function (Livreur $livreur) {
+                return [
+                    'id' => $livreur->id,
+                    'name' => $livreur->identifier()
+                ];
+            }),
+            'boutiques' => $boutiques->map(function (Boutique $boutique) {
+                return [
+                    'id' => $boutique->id,
+                    'name' => $boutique->identifier()
+                ];
+            }),
+        ]);
+    }
+
+    public function transferDistribPanetier(ProductionPanetier $productionPanetier,  Request $request)
+    {
+        $data = $request->validate([
+            "quantity" => 'required|integer',
+            "source_id" => 'required|integer',
+            "source_type" => 'required|string|in:client,livreur,abonnement,boutique',
+            "target_id" => 'required|integer',
+            "target_type" => 'required|string|in:client,livreur,abonnement,boutique',
+        ]);
+        $data['nombre_pain'] = $data['quantity'];
+        $source = null;
+        $target = null;
+        $source_name = null;
+        $target_name = null;
+
+        if ($data['source_type'] == 'livreur') {
+            $source = Livreur::findOrFail($data['source_id']);
+            $source_name = 'livreur';
+        } elseif ($data['source_type'] == 'client') {
+            $source = Client::findOrFail($data['source_id']);
+            $source_name = 'client';
+        } elseif ($data['source_type'] == 'abonnement') {
+            $source = Abonnement::findOrFail($data['source_id']);
+            $source_name = 'abonnement';
+        } elseif ($data['source_type'] == 'boutique') {
+            $source = Boutique::findOrFail($data['source_id']);
+            $source_name = 'boutique';
+        }
+        if ($data['target_type'] == 'livreur') {
+            $target = Livreur::findOrFail($data['target_id']);
+            $target_name = 'livreur';
+
+        } elseif ($data['target_type'] == 'client') {
+            $target = Client::findOrFail($data['target_id']);
+            $target_name = 'client';
+        } elseif ($data['target_type'] == 'abonnement') {
+            $target = Abonnement::findOrFail($data['target_id']);
+            $target_name = 'abonnement';
+        } elseif ($data['target_type'] == 'boutique') {
+            $target = Boutique::findOrFail($data['target_id']);
+            $target_name = 'boutique';
+        }
+        if ($source == null || $target == null) {
+            return response()->json(["message" => "Sélectionnez source et destination"],
+                Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        // find the distribPanetier of source in the distribPanetiers of the productionPanetier
+
+        $sourceDistribPanetier = $productionPanetier->distribPanetiers()
+            ->where($source_name . '_id', $source->id)->first();
+        if ($sourceDistribPanetier == null) {
+            return response()->json(["message" => "Sélectionnez source et destination"], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $targetDistribPanetier = $productionPanetier->distribPanetiers()
+            ->where($target_name . '_id', $target->id)->first();
+        if ($targetDistribPanetier == null) {
+            return response()->json(["message" => "Sélectionnez source et destination"], Response::HTTP_UNPROCESSABLE_ENTITY);
+
+        }
+        // transfer the pain from source to target
+        $sourceDistribPanetier->nombre_pain -= $data['nombre_pain'];
+        $targetDistribPanetier->nombre_pain += $data['nombre_pain'];
+        $sourceDistribPanetier->save();
+        $targetDistribPanetier->save();
+        // update the compte livreur, compte client, compte abonnement, compte boutique
+        if ($source instanceof Livreur) {
+            $compte = $source->compteLivreur;
+            $compte->diminuerSoldePain($data['nombre_pain']);
+            $compte->diminuerDette($data['nombre_pain'] * $source->prix_pain);
+            $compte->save();
+        } elseif ($source instanceof Client) {
+            $compte = $source->compteClient;
+            $compte->diminuerSoldePain($data['nombre_pain']);
+            $compte->diminuerDette($data['nombre_pain'] * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client);
+            $compte->save();
+        } elseif ($source instanceof Abonnement) {
+            $source->dette -= ($data['nombre_pain'] * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client);
+            $source->save();
+        } elseif ($source instanceof Boutique) {
+            $source->solde_pain -= $data['nombre_pain'];
+            $source->save();
+        }
+        if ($target instanceof Livreur) {
+            $compte = $target->compteLivreur;
+            $compte->augmenterSoldePain($data['nombre_pain']);
+            $compte->augmenterDette($data['nombre_pain'] * $target->prix_pain);
+            $compte->save();
+        } elseif ($target instanceof Client) {
+            $compte = $target->compteClient;
+            $compte->augmenterSoldePain($data['nombre_pain']);
+            $compte->augmenterDette($data['nombre_pain'] * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client);
+            $compte->save();
+        } elseif ($target instanceof Abonnement) {
+            $target->dette += ($data['nombre_pain'] * Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client);
+            $target->save();
+        } elseif ($target instanceof Boutique) {
+            $target->solde_pain += $data['nombre_pain'];
+            $target->save();
+        }
+
+        return response()->json([
+            "message" => "Transfert effectué avec succès",
+        ]);
+
     }
 
 }
