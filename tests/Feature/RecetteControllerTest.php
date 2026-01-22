@@ -120,4 +120,113 @@ class RecetteControllerTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonCount(0);
     }
+
+    public function test_update_recette_increase_increases_balance()
+    {
+        // When recette increases, balance should INCREASE
+        $typeRecette = TypeRecette::factory()->make();
+        $typeRecette->boulangerie_id = $this->boulangerie->id;
+        $typeRecette->save();
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        $caisse->solde = 10000;
+        $caisse->save();
+
+        $recette = new Recette([
+            'type_recette_id' => $typeRecette->id,
+            'montant' => 5000,
+            'caisse_id' => $caisse->id,
+            'boulangerie_id' => $this->boulangerie->id
+        ]);
+        $recette->save();
+
+        // Reset caisse to a known value after creation
+        $caisse->solde = 10000;
+        $caisse->save();
+
+        $updatedData = [
+            'montant' => 8000,  // Increased by 3000
+        ];
+
+        $response = $this->putJson('/api/recettes/' . $recette->id, $updatedData);
+
+        $response->assertStatus(200);
+
+        // Balance should INCREASE by 3000 (10000 + 3000 = 13000)
+        $caisse->refresh();
+        $this->assertEquals(13000, $caisse->solde);
+    }
+
+    public function test_update_recette_decrease_decreases_balance()
+    {
+        // When recette decreases, balance should DECREASE
+        $typeRecette = TypeRecette::factory()->make();
+        $typeRecette->boulangerie_id = $this->boulangerie->id;
+        $typeRecette->save();
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        $caisse->solde = 10000;
+        $caisse->save();
+
+        $recette = new Recette([
+            'type_recette_id' => $typeRecette->id,
+            'montant' => 8000,
+            'caisse_id' => $caisse->id,
+            'boulangerie_id' => $this->boulangerie->id
+        ]);
+        $recette->save();
+
+        // Reset caisse to a known value after creation
+        $caisse->solde = 10000;
+        $caisse->save();
+
+        $updatedData = [
+            'montant' => 5000,  // Decreased by 3000
+        ];
+
+        $response = $this->putJson('/api/recettes/' . $recette->id, $updatedData);
+
+        $response->assertStatus(200);
+
+        // Balance should DECREASE by 3000 (10000 - 3000 = 7000)
+        $caisse->refresh();
+        $this->assertEquals(7000, $caisse->solde);
+    }
+
+    public function test_update_recette_same_amount_no_balance_change()
+    {
+        // When recette stays the same, balance should not change
+        $typeRecette = TypeRecette::factory()->make();
+        $typeRecette->boulangerie_id = $this->boulangerie->id;
+        $typeRecette->save();
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        $caisse->solde = 10000;
+        $caisse->save();
+
+        $recette = new Recette([
+            'type_recette_id' => $typeRecette->id,
+            'montant' => 5000,
+            'caisse_id' => $caisse->id,
+            'boulangerie_id' => $this->boulangerie->id
+        ]);
+        $recette->save();
+
+        // Reset caisse to a known value after creation
+        $caisse->solde = 10000;
+        $caisse->save();
+
+        $updatedData = [
+            'montant' => 5000,  // Same amount
+            'commentaire' => 'Only comment changed'
+        ];
+
+        $response = $this->putJson('/api/recettes/' . $recette->id, $updatedData);
+
+        $response->assertStatus(200);
+
+        // Balance should remain unchanged
+        $caisse->refresh();
+        $this->assertEquals(10000, $caisse->solde);
+    }
 }

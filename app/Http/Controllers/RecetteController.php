@@ -84,21 +84,20 @@ class RecetteController extends Controller
             // Add other fields as necessary
         ]);
 
-
         // update caisse solde
-        DB::transaction(function () use ($validated,$recette) {
-            $diff = $validated['montant'] > $recette->montant ? $validated['montant'] - $recette->montant : $recette->montant - $validated['montant'];
+        DB::transaction(function () use ($validated, $recette) {
+            $previousMontant = $recette->montant;
+            $newMontant = $validated['montant'];
 
             $recette->update($validated);
             $caisse = Caisse::requireCaisseOfLoggedInUser();
+
             // calculate the difference between the old and new montant and update caisse accordingly
-            if ($validated['montant'] > $recette->montant) {
-                $caisse->augmenterSolde($diff);
-            } else {
-                $caisse->diminuerSolde($diff);
+            if ($newMontant > $previousMontant) {
+                $caisse->augmenterSolde($newMontant - $previousMontant);
+            } else if ($newMontant < $previousMontant) {
+                $caisse->diminuerSolde($previousMontant - $newMontant);
             }
-            $recette->save();
-            $caisse->augmenterSolde($recette->montant);
         });
         return response()->json($recette);
     }

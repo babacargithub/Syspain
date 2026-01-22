@@ -88,21 +88,23 @@ class DepenseController extends Controller
      */
     public function update(Request $request, Depense $depense)
     {
-        DB::transaction(function () use ($depense,$request) {
-            $previousAmount = $depense->montant;
+        DB::transaction(function () use ($depense, $request) {
+            $previousMontant = $depense->montant;
             $validatedData = $request->validate([
                 'montant' => 'numeric',
                 'type_depense_id' => 'integer|exists:type_depenses,id',
-                "commentaire"=>"nullable|string",
+                "commentaire" => "nullable|string",
             ]);
             $depense->update($validatedData);
             $caisse = $depense->caisse;
-            $shouldIncreaseSoldeCaisse = $validatedData['montant'] > $previousAmount;
-            $shouldDecreaseSoldeCaisse = $validatedData['montant'] < $previousAmount;
-            if ($shouldIncreaseSoldeCaisse){
-                $caisse->augmenterSolde($validatedData['montant'] - $previousAmount);
-            }else if ($shouldDecreaseSoldeCaisse){
-                $caisse->diminuerSolde($previousAmount - $validatedData['montant']);
+            $newMontant = $validatedData['montant'];
+
+            // If depense increases, balance should DECREASE (more money spent)
+            // If depense decreases, balance should INCREASE (less money spent)
+            if ($newMontant > $previousMontant) {
+                $caisse->diminuerSolde($newMontant - $previousMontant);
+            } else if ($newMontant < $previousMontant) {
+                $caisse->augmenterSolde($previousMontant - $newMontant);
             }
             $caisse->save();
         });

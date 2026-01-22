@@ -65,14 +65,32 @@ class DepenseControllerTest extends TestCase
         $response->assertJson($depense->toArray());
     }
 
-    public function test_update_modifies_existing_depense()
+    public function test_update_depense_increase_decreases_balance()
     {
-        $depense = Depense::factory()->create(["montant" => 10000,"boulangerie_id"=>$this->boulangerie->id]);
-        $caisse = Caisse::find($depense->caisse_id);
+        // When depense increases, balance should DECREASE (more money spent)
+        $typeDepense = TypeDepense::factory()->make();
+        $typeDepense->boulangerie_id = $this->boulangerie->id;
+        $typeDepense->save();
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
         $caisse->solde = 40000;
         $caisse->save();
+
+        $depense = new Depense([
+            'type_depense_id' => $typeDepense->id,
+            'montant' => 10000,
+            'caisse_id' => $caisse->id,
+            'commentaire' => 'Test expense'
+        ]);
+        $depense->boulangerie_id = $this->boulangerie->id;
+        $depense->save();
+
+        // Reset caisse to a known value
+        $caisse->solde = 40000;
+        $caisse->save();
+
         $updatedData = [
-            'montant' => 15000,
+            'montant' => 15000,  // Increased by 5000
             'commentaire' => 'Updated Commentaire'
         ];
 
@@ -80,10 +98,87 @@ class DepenseControllerTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('depenses', $updatedData);
-        // check caisse solde after update
-        $caisse->refresh();
-        $this->assertSame($caisse->solde, 45000);
 
+        // Balance should DECREASE by 5000 (40000 - 5000 = 35000)
+        $caisse->refresh();
+        $this->assertSame(35000, $caisse->solde);
+    }
+
+    public function test_update_depense_decrease_increases_balance()
+    {
+        // When depense decreases, balance should INCREASE (less money spent)
+        $typeDepense = TypeDepense::factory()->make();
+        $typeDepense->boulangerie_id = $this->boulangerie->id;
+        $typeDepense->save();
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        $caisse->solde = 40000;
+        $caisse->save();
+
+        $depense = new Depense([
+            'type_depense_id' => $typeDepense->id,
+            'montant' => 15000,
+            'caisse_id' => $caisse->id,
+            'commentaire' => 'Test expense'
+        ]);
+        $depense->boulangerie_id = $this->boulangerie->id;
+        $depense->save();
+
+        // Reset caisse to a known value
+        $caisse->solde = 40000;
+        $caisse->save();
+
+        $updatedData = [
+            'montant' => 10000,  // Decreased by 5000
+            'commentaire' => 'Reduced expense'
+        ];
+
+        $response = $this->putJson('/api/depenses/' . $depense->id, $updatedData);
+
+        $response->assertStatus(200);
+        $this->assertDatabaseHas('depenses', $updatedData);
+
+        // Balance should INCREASE by 5000 (40000 + 5000 = 45000)
+        $caisse->refresh();
+        $this->assertSame(45000, $caisse->solde);
+    }
+
+    public function test_update_depense_same_amount_no_balance_change()
+    {
+        // When depense stays the same, balance should not change
+        $typeDepense = TypeDepense::factory()->make();
+        $typeDepense->boulangerie_id = $this->boulangerie->id;
+        $typeDepense->save();
+
+        $caisse = Caisse::requireCaisseOfLoggedInUser();
+        $caisse->solde = 40000;
+        $caisse->save();
+
+        $depense = new Depense([
+            'type_depense_id' => $typeDepense->id,
+            'montant' => 10000,
+            'caisse_id' => $caisse->id,
+            'commentaire' => 'Test expense'
+        ]);
+        $depense->boulangerie_id = $this->boulangerie->id;
+        $depense->save();
+
+        // Reset caisse to a known value
+        $caisse->solde = 40000;
+        $caisse->save();
+
+        $updatedData = [
+            'montant' => 10000,  // Same amount
+            'commentaire' => 'Only comment changed'
+        ];
+
+        $response = $this->putJson('/api/depenses/' . $depense->id, $updatedData);
+
+        $response->assertStatus(200);
+
+        // Balance should remain unchanged
+        $caisse->refresh();
+        $this->assertSame(40000, $caisse->solde);
     }
 
     public function test_destroy_deletes_depense()
@@ -100,21 +195,25 @@ class DepenseControllerTest extends TestCase
     public function test_returns_depenses_for_a_specific_date()
     {
         // Arrange
-        $boulangerie = $this->boulangerie;
-        $caisse = Caisse::factory()->create(['boulangerie_id' => $boulangerie->id]);
-        $typeDepense = TypeDepense::factory()->create(['nom' => 'Achat café']);
+        $caisse = $this->caisse;
+        $typeDepense = TypeDepense::factory()->make();
+        $typeDepense->boulangerie_id = $this->boulangerie->id;
+        $typeDepense->nom = 'Achat café';
+        $typeDepense->save();
+
         $date = Carbon::today()->toDateString();
-        $depense = Depense::factory()->create([
-            'boulangerie_id' => $boulangerie->id,
+        $depense = new Depense([
             'type_depense_id' => $typeDepense->id,
             'montant' => 5000,
             'commentaire' => 'Achat café',
             'caisse_id' => $caisse->id,
-            'created_at' => $date
         ]);
+        $depense->boulangerie_id = $this->boulangerie->id;
+        $depense->created_at = $date;
+        $depense->save();
 
         // Act
-        $response = $this->getJson("api/depenses/date/{$date}"); // Adjust the URL as needed
+        $response = $this->getJson("api/depenses/date/{$date}");
 
         // Assert
         $response->assertOk();
