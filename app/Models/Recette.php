@@ -12,7 +12,7 @@ class Recette extends Model
     use HasFactory;
     use BoulangerieScope;
 
-    protected $fillable = ["montant", "type_recette_id","boulangerie_id","caisse_id","commentaire"];
+    protected $fillable = ["montant", "type_recette_id","boulangerie_id","caisse_id","commentaire","created_at"];
 
     public function typeRecette(): BelongsTo
     {

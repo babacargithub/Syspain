@@ -6,6 +6,7 @@ use App\Http\Resources\OperationCaisseResource;
 use App\Models\Boulangerie;
 use App\Models\Caisse;
 use App\Models\Depense;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -48,13 +49,16 @@ class DepenseController extends Controller
             'type_depense_id' => 'required|integer|exists:type_depenses,id',
             'montant' => 'required|numeric',
             "commentaire"=>"nullable|string",
+            "created_at"=>"nullable|date:Y-m-d",
             // Add other fields as necessary
         ]);
+//        return response()->json(Carbon::createFromDate($validatedData['created_at'] ?? now()->toDateString()),422);
 
         $depense = new Depense($validatedData);
-        DB::transaction(function () use ($depense) {
+        DB::transaction(function () use ($depense, $validatedData) {
             $depense->caisse()->associate(Caisse::requireCaisseOfLoggedInUser());
             $depense->boulangerie()->associate(Boulangerie::requireBoulangerieOfLoggedInUser());
+            $depense->created_at = Carbon::createFromDate($validatedData['created_at'] ?? now()->toDateString());
             $depense->save();
             $caisse = $depense->caisse;
             $caisse->diminuerSolde($depense->montant);
@@ -116,7 +120,7 @@ class DepenseController extends Controller
     {
         DB::transaction(function () use ($depense) {
             $caisse = $depense->caisse;
-            $caisse->diminuerSolde($depense->montant);
+            $caisse->augmenterSolde($depense->montant);
             $depense->delete();
         });
 

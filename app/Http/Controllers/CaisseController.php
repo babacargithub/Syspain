@@ -30,7 +30,7 @@ class CaisseController extends Controller
         $totalVersementsBanques = $versementsBanques->sum('montant');
         // TODO find a way to track solde initial and solde final
         $soldeInitial = $caisse->solde ?? 0;
-        $soldeFinal = $soldeInitial + $totalRecettes - $totalDepenses - $totalVersementsBanques;
+        $soldeFinal = $soldeInitial + $totalRecettes - $totalDepenses;
         return response()->json([
             "typeDepenses"=>TypeDepense::ofCurrentBoulangerie()->get(),
             "typeRecettes"=>TypeRecette::ofCurrentBoulangerie()->get(),

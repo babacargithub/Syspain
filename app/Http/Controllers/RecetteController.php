@@ -58,6 +58,7 @@ class RecetteController extends Controller
             'type_recette_id' => 'required|exists:type_recettes,id',
             'commentaire' => 'nullable|string',
             "caisse_id" => "exists:caisses,id",
+            "created_at"=>"nullable|date:Y-m-d",
             // Add other fields as necessary
         ]);
         if (!isset($validated['caisse_id'])) {
