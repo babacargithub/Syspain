@@ -41,7 +41,8 @@ Route::post('/login', [UserController::class, 'handleLoginAttempt']);
 
 // Protect routes with sanctum middleware
 
-Route::middleware('auth:sanctum')->group(function () {
+// 'idempotent' only acts on write requests sending an Idempotency-Key header
+Route::middleware(['auth:sanctum', 'idempotent'])->group(function () {
    Route::prefix('')->group(function (){
        Route::get('production_petrisseur/{date}', [PetrisseurController::class, 'productionDuJour']);
        Route::resource('petrisseurs', PetrisseurController::class);

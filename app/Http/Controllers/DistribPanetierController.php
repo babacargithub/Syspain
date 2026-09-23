@@ -68,6 +68,11 @@ class DistribPanetierController extends Controller
         }*/
         // start transaction before saving operations
         DB::transaction(function () use ($productionPanetier, $data) {
+            // Lock the production row so that concurrent submissions for the same production (double tap,
+            // client retry) run one after the other. Without it, both requests find no existing
+            // distribPanetier and both insert one, creating duplicates and counting the pain twice.
+            // This must stay the first query of the transaction so the lookups below see committed rows.
+            ProductionPanetier::whereKey($productionPanetier->id)->lockForUpdate()->first();
             $prix_pain_livreur = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_livreur;
             $prix_pain_client = Boulangerie::requireBoulangerieOfLoggedInUser()->prix_pain_client;
             // loop through livreurs and create a distribPanetier for each
